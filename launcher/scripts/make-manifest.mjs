@@ -1,10 +1,4 @@
 // Genera o actualiza el manifiesto de actualizaciones que consulta el launcher.
-//
-//   node launcher/scripts/make-manifest.mjs --installer launcher/build/Instalar-OpenClient.exe \
-//     --version 0.1.0-preview.28 \
-//     --url https://github.com/<usuario>/<repo>/releases/download/v0.1.0-preview.28/Instalar-OpenClient.exe \
-//     [--channel stable|beta] [--notes "Texto corto"] [--out manifest.json]
-//
 // Si --out ya existe se conservan los demás canales. El launcher exige HTTPS, y para ofrecer
 // «Descargar e instalar» necesita sha256 y size; este script los calcula del instalador real.
 import { createHash } from "node:crypto";

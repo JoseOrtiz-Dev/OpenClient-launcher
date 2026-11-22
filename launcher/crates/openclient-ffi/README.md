@@ -27,12 +27,5 @@ El inicio del juego también se ejecuta en un trabajador. El controlador consult
 `game_status` y mantiene el bloqueo de la biblioteca hasta el cierre de Java.
 La DLL permanece cargada porque el motor espera el cierre en un hilo de Rust.
 
-Compilación y pruebas desde la raíz:
-
-```powershell
-cargo test --locked --manifest-path crates/openclient-ffi/Cargo.toml --target-dir build/rust
-npm.cmd run qt:build -- -SmokeTest
-```
-
 El lockfile del puente se versiona porque genera un binario distribuible. Cambios
 incompatibles requieren subir la versión de ABI y adaptar los consumidores.

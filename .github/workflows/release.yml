@@ -1,8 +1,5 @@
 name: Release
 
-# Publicar una versión = subir una etiqueta:  git tag v0.1.0-preview.28 && git push origin v0.1.0-preview.28
-# Compila el instalador, crea el Release de GitHub y adjunta Instalar-OpenClient.exe y manifest.json.
-# La web enlaza a releases/latest/download/..., así que no hace falta tocarla.
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]

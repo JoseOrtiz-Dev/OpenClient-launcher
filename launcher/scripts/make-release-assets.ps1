@@ -1,7 +1,5 @@
 # Prepara lo que se adjunta a un Release de GitHub: manifest.json (para la actualización automática del launcher
 # y el aviso del bot) y las notas del Release con el SHA-256 del instalador.
-#   ./launcher/scripts/make-release-assets.ps1 -Tag v0.1.0-preview.28 -Repository usuario/OpenClient-launcher `
-#       -Installer launcher/build/Instalar-OpenClient.exe -NotesFile RELEASE_NOTES.md -OutDir launcher/build/release
 param(
     [Parameter(Mandatory)][string]$Tag,
     [Parameter(Mandatory)][string]$Repository,

@@ -29,12 +29,10 @@ Eso genera el instalador en `launcher/build/Instalar-OpenClient.exe`.
 | `launcher/crates/openclient-core` | Motor: descargas, Java, lanzamiento, cuentas y modpacks |
 | `launcher/crates/openclient-ffi` | Puente en C entre el motor y Qt |
 | `launcher/scripts` | Compilación, instalador y publicación de versiones |
-| `docs` | Cómo publicar una versión |
 
 ## Comunidad
 Ayuda, novedades y feedback en el [Discord de OpenClient](https://discord.gg/6wGeNxTNS6).
 
-Si quieres colaborar, lee [CONTRIBUTING.md](CONTRIBUTING.md). Para reportar una vulnerabilidad, [SECURITY.md](SECURITY.md). Para sacar una versión nueva, [docs/PUBLICAR-ACTUALIZACION.md](docs/PUBLICAR-ACTUALIZACION.md).
-
+Si quieres colaborar, lee [CONTRIBUTING.md](CONTRIBUTING.md). Para reportar una vulnerabilidad, [SECURITY.md](SECURITY.md).
 ## Licencia
 GPL-3.0, en [LICENSE](LICENSE). Qt se enlaza dinámicamente (LGPL-3.0) y los iconos de Octicons llevan su propia licencia en `share/openclient/licenses`.

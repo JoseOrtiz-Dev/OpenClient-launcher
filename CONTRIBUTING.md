@@ -24,7 +24,6 @@ Necesitas Rust MSVC, Visual Studio Build Tools 2022 con C++, CMake y Qt 6.11.3 o
 | `launcher/crates/openclient-core` | Motor: descargas, Java, lanzamiento, cuentas, modpacks |
 | `launcher/crates/openclient-ffi` | Puente C del motor hacia Qt (ABI v3, JSON) |
 | `launcher/scripts` | Compilación, instalador y publicación de versiones |
-| `docs` | Cómo publicar una versión |
 
 ## Antes de abrir un pull request
 

@@ -1,7 +1,5 @@
 // Escribe la versión en los únicos sitios donde está fija: la aplicación y el instalador.
-// La etiqueta de git (v0.1.0-preview.28) es la fuente de verdad; el workflow de release lo ejecuta antes de compilar.
-//
-//   node launcher/scripts/set-version.mjs v0.1.0-preview.28 [--root launcher]
+// La etiqueta de git es la fuente de verdad; el workflow de release lo ejecuta antes de compilar.
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
