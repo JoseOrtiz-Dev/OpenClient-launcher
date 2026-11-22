@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 96 96">
+  <title>OpenClient</title>
+  <defs>
+    <linearGradient id="top" x1="16" y1="8" x2="75" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFE798"/>
+      <stop offset="1" stop-color="#E7B849"/>
+    </linearGradient>
+    <linearGradient id="left" x1="9" y1="34" x2="46" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4C959"/>
+      <stop offset="1" stop-color="#CA891E"/>
+    </linearGradient>
+    <linearGradient id="right" x1="86" y1="34" x2="50" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DEA33B"/>
+      <stop offset="1" stop-color="#A66B14"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 7 86 28 48 49 10 28Z" fill="url(#top)"/>
+  <path d="M9 34 45 54v36L9 70Z" fill="url(#left)"/>
+  <path d="M51 54 87 34v36L51 90Z" fill="url(#right)"/>
+  <path d="M48 8.5 83 28 48 47.5 13 28Z" fill="none" stroke="#FFF1B6" stroke-opacity=".36" stroke-width="1.1" stroke-linejoin="round"/>
+</svg>

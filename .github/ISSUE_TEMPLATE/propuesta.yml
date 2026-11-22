@@ -1,0 +1,20 @@
+name: Propuesta
+description: Una función o mejora nueva
+labels: [propuesta]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qué problema resuelve
+      description: Cuenta la situación, no la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Qué propones
+  - type: textarea
+    id: otros
+    attributes:
+      label: Cómo lo resuelven otros launchers
+      description: Opcional. Prism, Modrinth App, HMCL u otros.

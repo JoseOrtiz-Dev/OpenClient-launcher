@@ -1,0 +1,2 @@
+// Shared OpenClient cube used by Explorer, the taskbar and the installer.
+IDI_ICON1 ICON "@REPOSITORY_ROOT@/src-tauri/icons/icon.ico"

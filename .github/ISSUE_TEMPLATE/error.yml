@@ -1,0 +1,50 @@
+name: Error
+description: Algo no funciona como debería
+labels: [error]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de enviar, no incluyas tokens, sesiones ni tu nombre de usuario de Windows.
+        En Ajustes > Datos hay un botón para exportar un informe que oculta esos datos.
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Qué hiciste
+      description: Pasos para repetirlo, de uno en uno.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Qué esperabas y qué pasó
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versión de OpenClient
+      placeholder: 0.1.0-preview.27
+    validations:
+      required: true
+  - type: input
+    id: juego
+    attributes:
+      label: Versión de Minecraft y loader
+      placeholder: 1.21.4 con Fabric
+  - type: dropdown
+    id: cuenta
+    attributes:
+      label: Tipo de cuenta
+      options: [Microsoft, Sin conexión]
+  - type: input
+    id: windows
+    attributes:
+      label: Versión de Windows
+      placeholder: Windows 11 23H2
+  - type: textarea
+    id: registro
+    attributes:
+      label: Registro o informe
+      description: Pega el informe exportado o las últimas líneas del registro del juego.
+      render: text

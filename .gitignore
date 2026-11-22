@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+launcher/cloudflare-api/node_modules/
+
+# Build outputs
+dist/
+target/
+.gradle/
+.kotlin/
+launcher/src-tauri/target/
+entrega/
+launcher/src-tauri/gen/
+
+# Environment & Secrets (Never commit keys!)
+.env
+.env.*
+!.env.example
+launcher/cloudflare-api/.dev.vars
+launcher/cloudflare-api/.dev.vars.*
+!launcher/cloudflare-api/.dev.vars.example
+launcher/cloudflare-api/.wrangler/
+*.pem
+*.key
+*.pfx
+*.p12
+*.dpapi
+*.keystore
+*.jks
+*.key.pub
+credentials*.json
+client_secret*.json
+session*.json
+launcher-state*.json
+.openclient/
+.albalauncher/
+.aws/
+.codex/
+
+# Native UI builds and machine-specific configuration
+.tools/
+build/
+cmake-build-*/
+CMakeUserPresets.json
+*.user
+launcher/crates/*/Cargo.lock
+!launcher/crates/openclient-core/Cargo.lock
+!launcher/crates/openclient-ffi/Cargo.lock
+
+# Modpacks locales (pesan >100 MB)
+launcher/modpack/*.mrpack
+
+# Local verification evidence; reviewed summaries live directly in docs/
+docs/audits/
+docs/previews/
+
+# Legacy & Logs
+*.log
+npm-debug.log*
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

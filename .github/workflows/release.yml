@@ -1,0 +1,87 @@
+name: Release
+
+# Publicar una versión = subir una etiqueta:  git tag v0.1.0-preview.28 && git push origin v0.1.0-preview.28
+# Compila el instalador, crea el Release de GitHub y adjunta Instalar-OpenClient.exe y manifest.json.
+# La web enlaza a releases/latest/download/..., así que no hace falta tocarla.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: write # crear el Release
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Compilar y publicar
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      REPOSITORY: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pruebas de los scripts de release
+        run: node --test launcher/scripts/set-version.test.mjs
+
+      - name: Fijar la versión de la etiqueta en la aplicación y el instalador
+        run: node launcher/scripts/set-version.mjs "$env:TAG"
+        shell: pwsh
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restaurar caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/crates/openclient-ffi
+
+      # aqtinstall 3.3.0 (la última en PyPI) no conoce la estructura de carpetas de Qt 6.11. El arreglo
+      # ("Support Qt 6.11+ for Windows x64") está en su rama principal, fijada aquí a un commit exacto.
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Qt 6.11.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          setup-python: false
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@4c759852b1108cc801d8e24979136b895b5155d4
+          version: 6.11.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtimageformats # qwebp.dll: las miniaturas de Modrinth son WebP y CMake lo exige
+          cache: true
+
+      - name: Compilar, probar y empaquetar
+        shell: pwsh
+        # La URL del manifiesto se fija al compilar: apunta siempre al del último Release.
+        run: ./launcher/scripts/build-qt.ps1 -QtRoot "$env:QT_ROOT_DIR" -SmokeTest -UpdateUrl "https://github.com/$env:REPOSITORY/releases/latest/download/manifest.json"
+
+      - name: Preparar manifiesto y notas
+        shell: pwsh
+        run: ./launcher/scripts/make-release-assets.ps1 -Tag $env:TAG -Repository $env:REPOSITORY -Installer launcher/build/Instalar-OpenClient.exe -NotesFile RELEASE_NOTES.md -OutDir launcher/build/release
+
+      - name: Crear el Release
+        shell: pwsh
+        run: |
+          gh release create $env:TAG `
+            launcher/build/Instalar-OpenClient.exe `
+            launcher/build/release/manifest.json `
+            --title $env:TAG `
+            --notes-file launcher/build/release/release-notes.md `
+            --verify-tag `
+            --latest
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el Release.' }

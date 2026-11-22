@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repositorio:
+    name: Comprobar repositorio
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Buscar secretos y archivos privados o generados
+        run: node launcher/scripts/check-repository.mjs
+
+  rust:
+    name: Motor Rust
+    runs-on: windows-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Restaurar caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            launcher/crates/openclient-core
+            launcher/crates/openclient-ffi
+
+      - name: Pruebas de openclient-core
+        run: cargo test --locked --manifest-path launcher/crates/openclient-core/Cargo.toml
+
+      - name: Clippy de openclient-core
+        run: cargo clippy --locked --all-targets --manifest-path launcher/crates/openclient-core/Cargo.toml -- -D warnings
+
+      - name: Pruebas de openclient-ffi
+        run: cargo test --locked --manifest-path launcher/crates/openclient-ffi/Cargo.toml
+
+      - name: Clippy de openclient-ffi
+        run: cargo clippy --locked --all-targets --manifest-path launcher/crates/openclient-ffi/Cargo.toml -- -D warnings
+
+  qt:
+    name: Interfaz Qt e instalador
+    needs: rust
+    runs-on: windows-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Rust estable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restaurar caché de Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/crates/openclient-ffi
+
+      # aqtinstall 3.3.0 (la última en PyPI) no conoce la estructura de carpetas de Qt 6.11. El arreglo
+      # ("Support Qt 6.11+ for Windows x64") está en su rama principal, fijada aquí a un commit exacto.
+      - name: Instalar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Qt 6.11.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          setup-python: false
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@4c759852b1108cc801d8e24979136b895b5155d4
+          version: 6.11.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtimageformats # qwebp.dll: las miniaturas de Modrinth son WebP y CMake lo exige
+          cache: true
+
+      - name: Compilar, probar y empaquetar
+        shell: pwsh
+        run: ./launcher/scripts/build-qt.ps1 -QtRoot "$env:QT_ROOT_DIR" -SmokeTest
+
+      - name: Calcular SHA-256 del instalador
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -LiteralPath launcher/build/Instalar-OpenClient.exe -Algorithm SHA256).Hash.ToLower()
+          "### Instalar-OpenClient.exe" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "SHA-256: ``$hash``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Subir el instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Instalar-OpenClient
+          path: launcher/build/Instalar-OpenClient.exe
+          if-no-files-found: error
