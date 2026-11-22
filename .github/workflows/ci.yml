@@ -63,7 +63,8 @@ jobs:
   qt:
     name: Interfaz Qt e instalador
     needs: rust
-    runs-on: windows-latest
+    # build-qt.ps1 usa el generador "Visual Studio 17 2022": windows-latest ya trae otra versión de Visual Studio.
+    runs-on: windows-2022
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
