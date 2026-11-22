@@ -14,7 +14,7 @@ const fail = (message) => {
 const argv = process.argv.slice(2);
 const rootIndex = argv.indexOf("--root");
 const root = rootIndex >= 0 ? argv[rootIndex + 1] : fileURLToPath(new URL("..", import.meta.url));
-const raw = argv.find((a, i) => !a.startsWith("--") && i !== rootIndex + 1) ?? "";
+const raw = argv.find((a, i) => !a.startsWith("--") && i !== (rootIndex >= 0 ? rootIndex + 1 : -1)) ?? "";
 const version = raw.replace(/^v/, "");
 if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]{1,40})?$/.test(version)) fail(`versión no válida: "${raw}" (ejemplo: v0.1.0-preview.28)`);
 

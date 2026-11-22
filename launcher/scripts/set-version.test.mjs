@@ -54,6 +54,12 @@ test("rechaza versiones inválidas sin tocar nada", () => {
   assert.equal(read(root, "apps/qt/src/main.cpp"), before);
 });
 
+test("sin --root lee la versión del primer argumento", () => {
+  const r = spawnSync(process.execPath, [script, "v9.9.9-x!"], { encoding: "utf8" });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /"v9\.9\.9-x!"/);
+});
+
 test("falla si el código cambió y ya no encuentra dónde escribir la versión", () => {
   const root = fixture();
   writeFileSync(join(root, "apps/qt/src/main.cpp"), "int main() {}\n");
