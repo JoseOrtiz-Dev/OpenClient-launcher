@@ -361,6 +361,9 @@ mod tests {
         .unwrap();
         assert!(symlink_dir(&outside, &package.join("game")));
         assert!(read(&root, &package).unwrap_err().contains("enlace"));
+        #[cfg(unix)]
+        fs::remove_file(package.join("game")).unwrap();
+        #[cfg(windows)]
         fs::remove_dir(package.join("game")).unwrap();
         fs::create_dir(package.join("game")).unwrap();
         assert!(symlink_dir(&outside, &package.join("game").join("saves")));

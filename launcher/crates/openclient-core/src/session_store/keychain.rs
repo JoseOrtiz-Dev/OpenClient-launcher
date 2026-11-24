@@ -15,7 +15,9 @@ pub(super) fn marker(id: &str) -> Vec<u8> {
 
 #[cfg(target_os = "macos")]
 pub(super) fn read(id: &str) -> Result<Vec<u8>, String> {
-    security_framework::passwords::generic_password(SERVICE, id)
+    use security_framework::passwords::{generic_password, PasswordOptions};
+
+    generic_password(PasswordOptions::new_generic_password(SERVICE, id))
         .map_err(|_| "No se encontró la sesión en el llavero de macOS. Inicia sesión otra vez.".into())
 }
 
