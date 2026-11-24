@@ -977,7 +977,9 @@ int main(int argc, char *argv[]) {
                 const bool invalidRamRejected = before == launcher.allocatedRamMb();
                 const bool success = !qmlWarning && launcher.hardwareError().isEmpty() && !launcher.hardware().isEmpty()
                     && invalidRamRejected && launchRejected && launcher.accountName().isEmpty()
-                    && launcher.linkAvailable(1) && !launcher.linkAvailable(0) && !launcher.linkAvailable(-1);
+                    && launcher.linkAvailable(1) && !launcher.linkAvailable(2) && !launcher.linkAvailable(-1)
+                    && launcher.linkUrl(0) == "https://openclient.josgpe.com/"
+                    && launcher.linkUrl(3) == "https://github.com/JoseOrtiz-Dev/OpenClient-launcher";
                 std::fprintf(stdout, "Qt smoke: pages=%d themes=%d sections=%d details=%d duplicate=ok transfer=ok library=ok offline=ok hardware=%s qml=%s\n", page, theme, section, detailSection,
                     launcher.hardware().isEmpty() ? "unavailable" : "ok", qmlWarning ? "warnings" : "ok");
                 app.exit(success ? 0 : 4);

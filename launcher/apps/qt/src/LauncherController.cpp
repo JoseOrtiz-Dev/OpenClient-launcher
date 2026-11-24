@@ -44,7 +44,8 @@ const QSet<QString> modpackWrites = {"modpack_update", "modpack_restore", "modpa
 const QStringList themes = {"crystal-ruby", "crystal-amethyst", "crystal-obsidian", "dark-obsidian"};
 const QStringList gcPresets = {"automatic", "g1gc", "generational_zgc", "low_memory"};
 const QStringList links = {
-    QString(), "https://discord.gg/6wGeNxTNS6", QString(), QString(),
+    "https://openclient.josgpe.com/", "https://discord.gg/6wGeNxTNS6", QString(),
+    "https://github.com/JoseOrtiz-Dev/OpenClient-launcher",
     "https://enderhosting.pro/?a=toamso10", "https://discord.gg/jJMcN9uJq"
 };
 }
