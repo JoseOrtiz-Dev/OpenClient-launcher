@@ -1884,7 +1884,7 @@ void LauncherController::scheduleLinkSync() {
     QTimer::singleShot(0, this, [this] { m_linksPending = false; syncInstanceLinks(); });
 }
 
-// Idempotente y no reentrante. Solo toca junctions/enlaces de la carpeta de accesos (rmdir, nunca borrado recursivo).
+// Idempotente y no reentrante. Quita solo el acceso y conserva la carpeta de destino.
 void LauncherController::syncInstanceLinks() {
     if (m_linksSyncing) return;
     m_linksSyncing = true;
@@ -1920,7 +1920,12 @@ void LauncherController::syncInstanceLinks() {
         if (!entry.isJunction() && !entry.isSymLink()) continue;   // carpetas y archivos del usuario: intactos
         const auto id = desired.value(entry.fileName());
         if (!id.isEmpty() && same(InstanceLinks::target(entry), root + "/instances/" + id)) continue;
-        if (!QDir().rmdir(entry.filePath())) std::fprintf(stderr, "No se pudo quitar el acceso obsoleto %s\n", qPrintable(entry.filePath()));
+#ifdef Q_OS_WIN
+        const bool removed = QDir().rmdir(entry.filePath());
+#else
+        const bool removed = QFile::remove(entry.filePath());
+#endif
+        if (!removed) std::fprintf(stderr, "No se pudo quitar el acceso obsoleto %s\n", qPrintable(entry.filePath()));
     }
     for (auto it = desired.cbegin(); it != desired.cend(); ++it) {
         const auto path = links.filePath(it.key());
