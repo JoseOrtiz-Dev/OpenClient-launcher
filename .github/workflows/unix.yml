@@ -1,0 +1,105 @@
+name: Linux y macOS
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+            host: linux
+            qt-arch: linux_gcc_64
+          - platform: macos-arm64
+            runner: macos-15
+            host: mac
+            qt-arch: clang_64
+          - platform: macos-x86_64
+            runner: macos-15-intel
+            host: mac
+            qt-arch: clang_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: inputs.tag != ''
+        with:
+          node-version: 22
+      - name: Fijar la versión de la etiqueta
+        if: inputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node launcher/scripts/set-version.mjs "$RELEASE_TAG"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            launcher/crates/openclient-core
+            launcher/crates/openclient-ffi
+      - name: Instalar dependencias de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y desktop-file-utils libgl1-mesa-dev libssl-dev libegl1 patchelf \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libx11-xcb1
+      - name: Instalar AppImageTool y el runtime
+        if: runner.os == 'Linux'
+        run: |
+          tools="$RUNNER_TEMP/openclient-appimage"
+          mkdir -p "$tools"
+          cd "$tools"
+          curl --fail --silent --show-error --location --retry 3 -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+          curl --fail --silent --show-error --location --retry 3 -o runtime-x86_64 \
+            https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          sha256sum --check --strict <<'CHECKSUMS'
+          ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool
+          2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d  runtime-x86_64
+          CHECKSUMS
+          chmod +x appimagetool
+          echo "$tools" >> "$GITHUB_PATH"
+          echo "OPENCLIENT_APPIMAGE_RUNTIME=$tools/runtime-x86_64" >> "$GITHUB_ENV"
+      - name: Probar el motor y el puente Rust
+        run: |
+          for crate in openclient-core openclient-ffi; do
+            manifest="launcher/crates/$crate/Cargo.toml"
+            cargo test --locked --manifest-path "$manifest"
+            cargo clippy --locked --all-targets --manifest-path "$manifest" -- -D warnings
+          done
+      - uses: jurplel/install-qt-action@v4
+        with:
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@4c759852b1108cc801d8e24979136b895b5155d4
+          version: 6.11.3
+          host: ${{ matrix.host }}
+          target: desktop
+          arch: ${{ matrix.qt-arch }}
+          modules: qtimageformats
+          cache: true
+      - name: Compilar, probar y empaquetar
+        env:
+          OPENCLIENT_UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/manifest.json
+        run: |
+          args=(--smoke-test)
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            args+=(--appimage)
+          fi
+          bash launcher/scripts/build-qt-unix.sh "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openclient-${{ matrix.platform }}
+          path: launcher/build/unix-packages/OpenClient-${{ matrix.platform }}.*
+          if-no-files-found: error

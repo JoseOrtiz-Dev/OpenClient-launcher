@@ -237,8 +237,8 @@
     </message>
     <message>
         <location filename="../qml/components/AccountDialog.qml" line="739"/>
-        <source>Sesión guardada con protección de Windows</source>
-        <translation>Session stored with Windows protection</translation>
+        <source>Sesión guardada con protección del sistema</source>
+        <translation>Session stored in your system credential store</translation>
     </message>
     <message>
         <location filename="../qml/components/AccountDialog.qml" line="754"/>
@@ -471,8 +471,8 @@
     </message>
     <message>
         <location filename="../qml/components/CommandsEditor.qml" line="49"/>
-        <source>Comando envoltorio (se antepone a java.exe)</source>
-        <translation>Wrapper command (prepended to java.exe)</translation>
+        <source>Comando envoltorio (se antepone al ejecutable de Java)</source>
+        <translation>Wrapper command (prepended to the Java executable)</translation>
     </message>
     <message>
         <location filename="../qml/components/CommandsEditor.qml" line="60"/>
@@ -1259,8 +1259,8 @@
     </message>
     <message>
         <location filename="../qml/components/InstanceAdvanced.qml" line="32"/>
-        <source>Elegir java.exe</source>
-        <translation>Choose java.exe</translation>
+        <source>Elegir Java</source>
+        <translation>Choose Java</translation>
     </message>
     <message>
         <location filename="../qml/components/InstanceAdvanced.qml" line="33"/>
@@ -1279,8 +1279,8 @@
     </message>
     <message>
         <location filename="../qml/components/InstanceAdvanced.qml" line="39"/>
-        <source>Elige el java.exe de esta instancia</source>
-        <translation>Choose the java.exe for this instance</translation>
+        <source>Selecciona el ejecutable de Java de esta instancia</source>
+        <translation>Choose the Java executable for this instance</translation>
     </message>
     <message>
         <location filename="../qml/components/InstanceAdvanced.qml" line="41"/>
@@ -3099,8 +3099,8 @@
     </message>
     <message>
         <location filename="../qml/pages/OfficialPage.qml" line="105"/>
-        <source>No se encontró el archivo del modpack. Copia el .mrpack como modpack/official.mrpack junto a openclient-qt.exe.</source>
-        <translation>Modpack file not found. Copy the .mrpack as modpack/official.mrpack next to openclient-qt.exe.</translation>
+        <source>No se encontró el archivo del modpack. Copia el .mrpack como modpack/official.mrpack junto al ejecutable de OpenClient.</source>
+        <translation>Modpack file is missing. Copy the .mrpack as modpack/official.mrpack next to the OpenClient executable.</translation>
     </message>
     <message>
         <location filename="../qml/pages/OfficialPage.qml" line="105"/>
@@ -3853,13 +3853,13 @@ Choose a version to review its dependencies before adding it.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="387"/>
-        <source>Puedes seleccionar hasta la RAM instalada. Windows y las demás aplicaciones también necesitan memoria.</source>
-        <translation>You can select up to the installed RAM. Windows and other apps need memory too.</translation>
+        <source>Puedes seleccionar hasta la RAM instalada. El sistema y las demás aplicaciones también necesitan memoria.</source>
+        <translation>You can select up to the installed RAM. Your operating system and other apps need memory too.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="392"/>
-        <source>Asignas más del 75 % de la RAM instalada. Windows y otras aplicaciones pueden quedarse sin memoria y el juego irá peor.</source>
-        <translation>You&apos;re allocating more than 75% of installed RAM. Windows and other apps may run out of memory and the game will run worse.</translation>
+        <source>Asignas más del 75 % de la RAM instalada. El sistema y otras aplicaciones pueden quedarse sin memoria y el juego irá peor.</source>
+        <translation>You&apos;re allocating more than 75% of installed RAM. Your operating system and other apps may run out of memory and affect game performance.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="53"/>
@@ -3957,8 +3957,8 @@ Choose a version to review its dependencies before adding it.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="556"/>
-        <source>Elegir java.exe</source>
-        <translation>Choose java.exe</translation>
+        <source>Elegir Java</source>
+        <translation>Choose Java</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="561"/>
@@ -3967,8 +3967,8 @@ Choose a version to review its dependencies before adding it.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="587"/>
-        <source>Selecciona java.exe o javaw.exe</source>
-        <translation>Select java.exe or javaw.exe</translation>
+        <source>Selecciona el ejecutable de Java</source>
+        <translation>Select the Java executable</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="593"/>
@@ -4142,8 +4142,8 @@ Choose a version to review its dependencies before adding it.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="985"/>
-        <source>Modo portable: todo vive en la carpeta «data» junto al programa. Las sesiones de Microsoft están protegidas para este usuario de Windows y habrá que iniciar sesión otra vez en otro equipo.</source>
-        <translation>Portable mode: everything lives in the “data” folder next to the program. Microsoft sessions are protected for this Windows user, so you&apos;ll need to sign in again on another computer.</translation>
+        <source>Modo portable: los datos viven en la carpeta «data» junto al programa. Las sesiones de Microsoft están protegidas por tu sistema y requieren volver a iniciar sesión en otro equipo.</source>
+        <translation>Portable mode keeps data in the “data” folder next to the program. Your system protects Microsoft sessions, so signing in again is required on another computer.</translation>
     </message>
     <message>
         <location filename="../qml/pages/SettingsPage.qml" line="994"/>

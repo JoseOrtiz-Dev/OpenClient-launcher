@@ -26,6 +26,7 @@ use std::time::Duration;
 use crate::performance::{build_god_jvm_flags, GodOptimizationConfig};
 
 const LAUNCHER_NAME: &str = "OpenClient";
+const MINECRAFT_OS: &str = if cfg!(target_os = "macos") { "osx" } else { std::env::consts::OS };
 
 #[cfg(target_os = "windows")]
 const CP_SEP: &str = ";";
@@ -511,21 +512,25 @@ async fn run_downloads(
 
 // Reglas y argumentos
 
-fn rule_os_matches(os: &Value) -> bool {
-    if let Some(name) = os.get("name").and_then(|v| v.as_str()) {
-        if name != "windows" {
-            return false;
+fn rule_os_matches(os: &Value, name: &str, arch: &str) -> bool {
+    if os["name"].as_str().is_some_and(|required| required != name) {
+        return false;
+    }
+    fn normalize_arch(arch: &str) -> &str {
+        match arch {
+            "amd64" | "x64" => "x86_64",
+            "arm64" => "aarch64",
+            "i386" | "i686" => "x86",
+            other => other,
         }
     }
-    if let Some(arch) = os.get("arch").and_then(|v| v.as_str()) {
-        if arch != "x86_64" && arch != "amd64" {
-            return false;
-        }
+    if os["arch"].as_str().is_some_and(|required| normalize_arch(required) != normalize_arch(arch)) {
+        return false;
     }
     os.get("version").is_none()
 }
 
-fn rules_allow(rules: Option<&Value>) -> bool {
+fn rules_allow(rules: Option<&Value>, arch: &str) -> bool {
     let arr = match rules.and_then(|r| r.as_array()) {
         Some(a) if !a.is_empty() => a,
         _ => return true,
@@ -541,7 +546,7 @@ fn rules_allow(rules: Option<&Value>) -> bool {
             false
         } else {
             match rule.get("os") {
-                Some(os) => rule_os_matches(os),
+                Some(os) => rule_os_matches(os, MINECRAFT_OS, arch),
                 None => true,
             }
         };
@@ -560,14 +565,14 @@ fn subst(s: &str, vars: &HashMap<&str, String>) -> String {
     r
 }
 
-fn collect_args(arr: Option<&Value>, vars: &HashMap<&str, String>) -> Vec<String> {
+fn collect_args(arr: Option<&Value>, vars: &HashMap<&str, String>, arch: &str) -> Vec<String> {
     let mut out = Vec::new();
     if let Some(items) = arr.and_then(|v| v.as_array()) {
         for item in items {
             match item {
                 Value::String(s) => out.push(subst(s, vars)),
                 Value::Object(_) => {
-                    if !rules_allow(item.get("rules")) {
+                    if !rules_allow(item.get("rules"), arch) {
                         continue;
                     }
                     match item.get("value") {
@@ -647,6 +652,7 @@ fn collect_libraries(
     classpath: &mut Vec<PathBuf>,
     native_jars: &mut Vec<PathBuf>,
     seen: &mut HashSet<String>,
+    arch: &str,
 ) {
     let arr = match libs.and_then(|l| l.as_array()) {
         Some(a) => a,
@@ -654,7 +660,7 @@ fn collect_libraries(
     };
 
     for lib in arr {
-        if !rules_allow(lib.get("rules")) {
+        if !rules_allow(lib.get("rules"), arch) {
             continue;
         }
         let name = lib.get("name").and_then(|n| n.as_str()).unwrap_or("");
@@ -662,10 +668,11 @@ fn collect_libraries(
         // Natives del formato antiguo (< 1.19): se extraen a la carpeta natives.
         if let Some(classifier) = lib
             .get("natives")
-            .and_then(|n| n.get("windows"))
+            .and_then(|n| n.get(MINECRAFT_OS))
             .and_then(|c| c.as_str())
         {
-            let classifier = classifier.replace("${arch}", "64");
+            let bits = if matches!(arch, "x86" | "arm") { "32" } else { "64" };
+            let classifier = classifier.replace("${arch}", bits);
             if let Some(art) = lib.pointer(&format!("/downloads/classifiers/{}", classifier)) {
                 if let Some((task, dest)) = artifact_task(art, libs_dir) {
                     tasks.push(task);
@@ -724,7 +731,7 @@ fn extract_natives(jars: &[PathBuf], dest: &Path) -> Result<(), String> {
                 continue;
             }
             let lower = name.to_lowercase();
-            if !(lower.ends_with(".dll") || lower.ends_with(".so") || lower.ends_with(".dylib")) {
+            if ![".dll", ".so", ".dylib", ".jnilib"].iter().any(|extension| lower.ends_with(extension)) {
                 continue;
             }
             let file_name = match Path::new(&name).file_name() {
@@ -1726,6 +1733,12 @@ pub async fn launch_game<
             .clone()
             .ok_or("No se encontró Java compatible")?,
     );
+    let exe = crate::java_runtime::console_executable(&java_path);
+    let java_for_probe = exe.clone();
+    let arch = tokio::task::spawn_blocking(move || crate::java_runtime::architecture(&java_for_probe))
+        .await
+        .map_err(|error| error.to_string())?
+        .unwrap_or(std::env::consts::ARCH);
 
     // 3) Cargador de mods (Fabric / Quilt / Forge / NeoForge)
     let fabric_json = match loader.as_str() {
@@ -1801,6 +1814,7 @@ pub async fn launch_game<
             &mut classpath,
             &mut native_jars,
             &mut seen,
+            arch,
         );
     }
     collect_libraries(
@@ -1810,6 +1824,7 @@ pub async fn launch_game<
         &mut classpath,
         &mut native_jars,
         &mut seen,
+        arch,
     );
 
     let client_info = vjson
@@ -1840,7 +1855,7 @@ pub async fn launch_game<
     app.cancel.check()?;
 
     // Natives (versiones antiguas)
-    let natives_dir = game_dir.join(".openclient").join("natives").join(&mc);
+    let natives_dir = game_dir.join(".openclient").join("natives").join(&mc).join(arch);
     {
         let jars = native_jars.clone();
         let dest = natives_dir.clone();
@@ -1953,7 +1968,7 @@ pub async fn launch_game<
         let available = sys.available_memory() / (1024 * 1024);
         if requested.saturating_add(1024) > available {
             warnings.push(format!(
-                "Elegiste {} MB para Minecraft; hay {} MB disponibles en este momento. Se conserva tu selección. Windows y otras aplicaciones también necesitan memoria.",
+                "Elegiste {} MB para Minecraft; hay {} MB disponibles en este momento. Se conserva tu selección. El sistema y otras aplicaciones también necesitan memoria.",
                 requested, available
             ));
         }
@@ -2021,7 +2036,7 @@ pub async fn launch_game<
     ));
 
     if vjson.pointer("/arguments/jvm").is_some() {
-        jvm_args.extend(collect_args(vjson.pointer("/arguments/jvm"), &vars));
+        jvm_args.extend(collect_args(vjson.pointer("/arguments/jvm"), &vars, arch));
     } else {
         jvm_args.push(format!(
             "-Djava.library.path={}",
@@ -2031,18 +2046,21 @@ pub async fn launch_game<
         jvm_args.push(classpath_str.clone());
     }
     if let Some(f) = &fabric_json {
-        jvm_args.extend(collect_args(f.pointer("/arguments/jvm"), &vars));
+        jvm_args.extend(collect_args(f.pointer("/arguments/jvm"), &vars, arch));
+    }
+    if cfg!(target_os = "macos") && !jvm_args.iter().any(|arg| arg == "-XstartOnFirstThread") {
+        jvm_args.push("-XstartOnFirstThread".into());
     }
 
     // Juego
     let mut game_args: Vec<String> = Vec::new();
     if vjson.pointer("/arguments/game").is_some() {
-        game_args.extend(collect_args(vjson.pointer("/arguments/game"), &vars));
+        game_args.extend(collect_args(vjson.pointer("/arguments/game"), &vars, arch));
     } else if let Some(legacy) = vjson["minecraftArguments"].as_str() {
         game_args.extend(legacy.split_whitespace().map(|a| subst(a, &vars)));
     }
     if let Some(f) = &fabric_json {
-        game_args.extend(collect_args(f.pointer("/arguments/game"), &vars));
+        game_args.extend(collect_args(f.pointer("/arguments/game"), &vars, arch));
     }
     if optimization.window_width >= 320
         && optimization.window_height >= 240
@@ -2105,16 +2123,6 @@ pub async fn launch_game<
     let log_err = log_file
         .try_clone()
         .map_err(|e| format!("No se pudo duplicar el log: {}", e))?;
-
-    // `java.exe` (con stdout redirigido al log) en lugar de `javaw.exe`, sin ventana de consola.
-    let mut exe = java_path.clone();
-    #[cfg(target_os = "windows")]
-    {
-        let console = java_path.with_file_name("java.exe");
-        if console.exists() {
-            exe = console;
-        }
-    }
 
     let hook_environment = vec![
         ("OPENCLIENT_INSTANCE_ID", request.instance_id.clone()),
@@ -2500,7 +2508,7 @@ mod offline_tests {
                     "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 100}}},
                 {"name": "net.neoforged:neoforge:21.0.5:universal", "downloads": {"artifact": {
                     "path": "net/neoforged/neoforge/21.0.5/neoforge-21.0.5-universal.jar", "url": "", "size": 5}}},
-                {"name": "org.lwjgl:lwjgl:3.3.3", "rules": [{"action": "allow", "os": {"name": "osx"}}],
+                {"name": "org.lwjgl:lwjgl:3.3.3", "rules": [{"action": "allow", "os": {"name": "other-os"}}],
                  "downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar", "url": "https://libraries.minecraft.net/x.jar"}}},
                 {"name": "evil:escape:1.0", "downloads": {"artifact": {"path": "../escape.jar", "url": "https://example.net/escape.jar"}}}
             ]
@@ -2511,7 +2519,7 @@ mod offline_tests {
         let (mut tasks, mut classpath, mut natives) = (Vec::new(), Vec::new(), Vec::new());
         let mut seen = HashSet::new();
         for list in libs {
-            collect_libraries(Some(*list), base, &mut tasks, &mut classpath, &mut natives, &mut seen);
+            collect_libraries(Some(*list), base, &mut tasks, &mut classpath, &mut natives, &mut seen, "x86_64");
         }
         (tasks, classpath, natives)
     }
@@ -2674,8 +2682,8 @@ mod offline_tests {
             {"name": "org.lwjgl:lwjgl:3.3.3", "downloads": {"artifact": {"path": "l/lwjgl.jar", "url": "https://x.net/l.jar"}}},
             {"name": "org.lwjgl:lwjgl:3.3.3:natives-windows", "downloads": {"artifact": {"path": "l/lwjgl-natives.jar", "url": "https://x.net/n.jar"}}},
             {"name": "org.lwjgl:lwjgl:3.3.2", "downloads": {"artifact": {"path": "l/duplicada.jar", "url": "https://x.net/d.jar"}}},
-            {"name": "legacy:natives:1.0", "natives": {"windows": "natives-windows-${arch}"},
-             "downloads": {"classifiers": {"natives-windows-64": {"path": "legacy/n64.jar", "url": "https://x.net/n64.jar"}},
+            {"name": "legacy:natives:1.0", "natives": {(MINECRAFT_OS): "natives-test-${arch}"},
+             "downloads": {"classifiers": {"natives-test-64": {"path": "legacy/n64.jar", "url": "https://x.net/n64.jar"}},
                            "artifact": {"path": "legacy/main.jar", "url": "https://x.net/main.jar"}}}
         ]);
         let (tasks, classpath, natives) = collect(&[&libs], base);
@@ -2735,41 +2743,47 @@ mod offline_tests {
         vars.insert("library_directory", "C:/libs".into());
         vars.insert("version_name", "1.21".into());
         vars.insert("classpath_separator", CP_SEP.into());
-        let jvm = collect_args(profile.pointer("/arguments/jvm"), &vars);
-        assert_eq!(
-            jvm,
-            vec![
-                "-DlibraryDirectory=C:/libs".to_string(),
-                "-DignoreList=bootstraplauncher,1.21.jar".into(),
-                "-p".into(),
-                format!("C:/libs/a/a.jar{CP_SEP}C:/libs/b/b.jar"),
-                "-Dwin=1".into(),
-                "-Dwin2=1.21".into(),
-                "-Dsin.reglas=1".into(),
-            ]
-        );
+        let jvm = collect_args(profile.pointer("/arguments/jvm"), &vars, "x86_64");
+        let mut expected = vec![
+            "-DlibraryDirectory=C:/libs".to_string(),
+            "-DignoreList=bootstraplauncher,1.21.jar".into(),
+            "-p".into(),
+            format!("C:/libs/a/a.jar{CP_SEP}C:/libs/b/b.jar"),
+        ];
+        if cfg!(windows) {
+            expected.extend(["-Dwin=1".into(), "-Dwin2=1.21".into()]);
+        }
+        if cfg!(target_os = "macos") {
+            expected.push("-XstartOnFirstThread".into());
+        }
+        expected.push("-Dsin.reglas=1".into());
+        assert_eq!(jvm, expected);
         // Los argumentos de juego se copian tal cual; las variables desconocidas no se tocan.
         assert_eq!(
-            collect_args(profile.pointer("/arguments/game"), &vars),
+            collect_args(profile.pointer("/arguments/game"), &vars, "x86_64"),
             vec!["--fml.neoForgeVersion", "21.0.5", "--launchTarget", "forgeclient"]
         );
-        assert_eq!(collect_args(Some(&json!(["${desconocida}"])), &vars), vec!["${desconocida}"]);
-        assert!(collect_args(None, &vars).is_empty());
-        assert!(collect_args(Some(&json!("no es lista")), &vars).is_empty());
+        assert_eq!(collect_args(Some(&json!(["${desconocida}"])), &vars, "x86_64"), vec!["${desconocida}"]);
+        assert!(collect_args(None, &vars, "x86_64").is_empty());
+        assert!(collect_args(Some(&json!("no es lista")), &vars, "x86_64").is_empty());
     }
 
     #[test]
     fn rule_lists_follow_the_last_matching_rule() {
+        let rules_allow = |rules: Option<&Value>| super::rules_allow(rules, std::env::consts::ARCH);
         assert!(rules_allow(None));
         assert!(rules_allow(Some(&json!([]))));
-        let windows = json!({"name": "windows", "arch": "x86_64"});
-        assert!(rules_allow(Some(&json!([{"action": "allow", "os": windows}]))));
-        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": "linux"}}]))));
-        assert!(!rules_allow(Some(&json!([{"action": "allow"}, {"action": "disallow", "os": {"name": "windows"}}]))));
-        assert!(rules_allow(Some(&json!([{"action": "disallow", "os": {"name": "osx"}}, {"action": "allow"}]))));
-        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": "windows", "arch": "x86"}}]))));
-        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": "windows", "version": "^10"}}]))));
+        let host = json!({"name": MINECRAFT_OS, "arch": std::env::consts::ARCH});
+        assert!(rules_allow(Some(&json!([{"action": "allow", "os": host}]))));
+        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": "other-os"}}]))));
+        assert!(!rules_allow(Some(&json!([{"action": "allow"}, {"action": "disallow", "os": {"name": MINECRAFT_OS}}]))));
+        assert!(rules_allow(Some(&json!([{"action": "disallow", "os": {"name": MINECRAFT_OS}}, {"action": "allow"}]))));
+        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": MINECRAFT_OS, "arch": "other-arch"}}]))));
+        assert!(!rules_allow(Some(&json!([{"action": "allow", "os": {"name": MINECRAFT_OS, "version": "^10"}}]))));
         assert!(!rules_allow(Some(&json!([{"action": "allow", "features": {"has_custom_resolution": true}}]))));
+        assert!(rule_os_matches(&json!({"name":"osx","arch":"arm64"}), "osx", "aarch64"));
+        assert!(rule_os_matches(&json!({"name":"linux","arch":"amd64"}), "linux", "x86_64"));
+        assert!(!rule_os_matches(&json!({"name":"osx","arch":"arm64"}), "osx", "x86_64"));
     }
 
     // Rutas

@@ -384,12 +384,12 @@ ColumnLayout {
                                 }
                             }
                         }
-                        Text { text: qsTr("Puedes seleccionar hasta la RAM instalada. Windows y las demás aplicaciones también necesitan memoria."); color: Theme.dim; font.family: Theme.fontFamily; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                        Text { text: qsTr("Puedes seleccionar hasta la RAM instalada. El sistema y las demás aplicaciones también necesitan memoria."); color: Theme.dim; font.family: Theme.fontFamily; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         Text {
                             objectName: "memoryWarning"
                             visible: launcher.memoryWarning && (launcher.hardware.installed_ram_mb || 0) > 0
                                 && launcher.allocatedRamMb > (launcher.hardware.installed_ram_mb || 0) * 0.75
-                            text: qsTr("Asignas más del 75 % de la RAM instalada. Windows y otras aplicaciones pueden quedarse sin memoria y el juego irá peor.")
+                            text: qsTr("Asignas más del 75 % de la RAM instalada. El sistema y otras aplicaciones pueden quedarse sin memoria y el juego irá peor.")
                             color: Theme.warning; font.family: Theme.fontFamily; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true
                         }
                         RowLayout {
@@ -427,6 +427,7 @@ ColumnLayout {
                             GlassSwitch { checked: launcher.preTouchMemory; onToggled: launcher.preTouchMemory = checked; Accessible.name: "Pre-asignar RAM al iniciar" }
                         }
                         RowLayout {
+                            visible: Qt.platform.os === "windows"
                             Layout.fillWidth: true
                             ColumnLayout {
                                 Layout.fillWidth: true
@@ -553,7 +554,7 @@ ColumnLayout {
                                 }
                             }
                             ActionButton {
-                                text: qsTr("Elegir java.exe"); glyph: "folder"; compact: true
+                                text: qsTr("Elegir Java"); glyph: "folder"; compact: true
                                 enabled: !launcher.javaBusy && !launcher.gameBusy
                                 onClicked: javaPicker.open()
                             }
@@ -584,8 +585,8 @@ ColumnLayout {
                         }
                         NativeDialogs.FileDialog {
                             id: javaPicker
-                            title: qsTr("Selecciona java.exe o javaw.exe")
-                            nameFilters: ["Ejecutable Java (java.exe javaw.exe)"]
+                            title: qsTr("Selecciona el ejecutable de Java")
+                            nameFilters: Qt.platform.os === "windows" ? ["Java (java.exe javaw.exe)"] : ["Java (java)"]
                             onAccepted: {
                                 if (launcher.setJavaPath(javaMajor.currentValue, selectedFile))
                                     javaError.localError = ""
@@ -995,7 +996,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
                             color: Theme.highlight
-                            text: qsTr("Modo portable: todo vive en la carpeta «data» junto al programa. Las sesiones de Microsoft están protegidas para este usuario de Windows y habrá que iniciar sesión otra vez en otro equipo.")
+                            text: qsTr("Modo portable: los datos viven en la carpeta «data» junto al programa. Las sesiones de Microsoft están protegidas por tu sistema y requieren volver a iniciar sesión en otro equipo.")
                         }
                         GlassField {
                             text: launcher.dataDirectory

@@ -12,14 +12,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Compilar y publicar
+  unix:
+    uses: ./.github/workflows/unix.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  windows:
+    name: Compilar para Windows
     # build-qt.ps1 usa el generador "Visual Studio 17 2022": windows-latest ya trae otra versión de Visual Studio.
     runs-on: windows-2022
     env:
       TAG: ${{ github.ref_name }}
       REPOSITORY: ${{ github.repository }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Descargar el código
         uses: actions/checkout@v4
@@ -72,14 +76,33 @@ jobs:
         shell: pwsh
         run: ./launcher/scripts/make-release-assets.ps1 -Tag $env:TAG -Repository $env:REPOSITORY -Installer launcher/build/Instalar-OpenClient.exe -NotesFile RELEASE_NOTES.md -OutDir launcher/build/release
 
-      - name: Crear el Release
+      - name: Reunir los archivos de Windows
         shell: pwsh
         run: |
-          gh release create $env:TAG `
-            launcher/build/Instalar-OpenClient.exe `
-            launcher/build/release/manifest.json `
-            --title $env:TAG `
-            --notes-file launcher/build/release/release-notes.md `
-            --verify-tag `
-            --latest
-          if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el Release.' }
+          Copy-Item -LiteralPath launcher/build/Instalar-OpenClient.exe -Destination launcher/build/release/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openclient-windows-publication
+          path: launcher/build/release/
+          if-no-files-found: error
+
+  publish:
+    name: Publicar en GitHub Releases
+    needs: [windows, unix]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: openclient-*
+          path: release
+          merge-multiple: true
+      - run: |
+          gh release create "$TAG" \
+            release/Instalar-OpenClient.exe release/manifest.json \
+            release/OpenClient-linux-x86_64.AppImage release/OpenClient-linux-x86_64.tar.gz \
+            release/OpenClient-macos-arm64.zip release/OpenClient-macos-x86_64.zip \
+            --title "$TAG" --notes-file release/release-notes.md --verify-tag --latest

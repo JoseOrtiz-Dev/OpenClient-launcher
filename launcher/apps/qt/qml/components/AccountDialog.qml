@@ -736,7 +736,7 @@ GlassDialog {
                                 Layout.fillWidth: true
                                 spacing: 10
                                 Repeater {
-                                    model: [qsTr("Acceso a servidores con autenticación oficial"), qsTr("Renovación automática cuando sea posible"), qsTr("Sesión guardada con protección de Windows")]
+                                    model: [qsTr("Acceso a servidores con autenticación oficial"), qsTr("Renovación automática cuando sea posible"), qsTr("Sesión guardada con protección del sistema")]
                                     RowLayout {
                                         required property string modelData
                                         Layout.fillWidth: true

@@ -1,6 +1,8 @@
 //! Session secrets stay out of launcher_state.json and the webview's localStorage.
 use crate::identity::MinecraftAccount;
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+mod keychain;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct SavedSession {
@@ -152,24 +154,44 @@ fn protect(input: &[u8], decrypt: bool) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-#[cfg(not(windows))]
-fn protect(_input: &[u8], _decrypt: bool) -> Result<Vec<u8>, String> {
-    Err("El almacenamiento protegido de sesiones requiere Windows.".into())
-}
-
 pub(crate) fn load(path: &std::path::Path) -> Result<Option<SavedSession>, String> {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("No se pudo leer la sesión protegida.".into()),
     };
-    serde_json::from_slice(&protect(&bytes, true)?)
+    #[cfg(windows)]
+    let data = protect(&bytes, true)?;
+    #[cfg(unix)]
+    let data = keychain::read(keychain::locator(&bytes).ok_or(
+        "La sesión se guardó en otro sistema. Inicia sesión otra vez.",
+    )?)?;
+    serde_json::from_slice(&data)
         .map(Some)
         .map_err(|_| "La sesión guardada no es válida. Inicia sesión otra vez.".into())
 }
 pub(crate) fn save(path: &std::path::Path, session: &SavedSession) -> Result<(), String> {
     let bytes = serde_json::to_vec(session).map_err(|_| "No se pudo preparar la sesión")?;
-    let encrypted = protect(&bytes, false)?;
+    #[cfg(windows)]
+    return write_file(path, &protect(&bytes, false)?);
+    #[cfg(unix)]
+    {
+        if let Ok(marker) = std::fs::read(path) {
+            if let Some(id) = keychain::locator(&marker) {
+                return keychain::write(id, &bytes);
+            }
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        keychain::write(&id, &bytes)?;
+        let result = write_file(path, &keychain::marker(&id));
+        if result.is_err() {
+            let _ = keychain::remove(&id);
+        }
+        result
+    }
+}
+
+fn write_file(path: &std::path::Path, data: &[u8]) -> Result<(), String> {
     std::fs::create_dir_all(path.parent().ok_or("Ruta de sesión inválida")?)
         .map_err(|_| "No se pudo crear la carpeta de sesiones")?;
     use std::io::Write;
@@ -179,7 +201,7 @@ pub(crate) fn save(path: &std::path::Path, session: &SavedSession) -> Result<(),
         .create_new(true)
         .open(&temp);
     let mut file = write.map_err(|_| "No se pudo preparar la sesión protegida")?;
-    let result = file.write_all(&encrypted).and_then(|_| file.sync_all());
+    let result = file.write_all(data).and_then(|_| file.sync_all());
     drop(file);
     if result.is_err() {
         let _ = std::fs::remove_file(&temp);
@@ -201,10 +223,23 @@ pub(crate) fn save(path: &std::path::Path, session: &SavedSession) -> Result<(),
         }
     }
     #[cfg(not(windows))]
-    std::fs::rename(temp, path).map_err(|_| "No se pudo reemplazar la sesión")?;
+    if std::fs::rename(&temp, path).is_err() {
+        let _ = std::fs::remove_file(&temp);
+        return Err("No se pudo reemplazar la sesión protegida".into());
+    }
     Ok(())
 }
 pub(crate) fn clear(path: &std::path::Path) -> Result<(), String> {
+    #[cfg(unix)]
+    match std::fs::read(path) {
+        Ok(marker) => {
+            if let Some(id) = keychain::locator(&marker) {
+                keychain::remove(id)?;
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err("No se pudo leer la sesión protegida.".into()),
+    }
     match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),

@@ -29,15 +29,15 @@ ColumnLayout {
             text: root.javaPath || qsTr("Automático (usa la configuración global)")
             Accessible.name: "Java de la instancia"
         }
-        ActionButton { text: qsTr("Elegir java.exe"); enabled: root.canSave; onClicked: javaPicker.open() }
+        ActionButton { text: qsTr("Elegir Java"); enabled: root.canSave; onClicked: javaPicker.open() }
         ActionButton { text: qsTr("Automático"); enabled: root.canSave && root.javaPath.length > 0; onClicked: root.save({ javaPath: "" }, qsTr("Java automático."), javaFeedback) }
     }
     Label { text: qsTr("La versión debe coincidir con la que pide esta versión de Minecraft; si no, el juego no se inicia y lo avisa."); color: Theme.dim; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     Label { id: javaFeedback; property bool isError: false; visible: text.length > 0; textFormat: Text.PlainText; color: isError ? Theme.danger : Theme.success; wrapMode: Text.WordWrap; Layout.fillWidth: true }
     NativeDialogs.FileDialog {
         id: javaPicker
-        title: qsTr("Elige el java.exe de esta instancia")
-        nameFilters: ["Java (java.exe javaw.exe)"]
+        title: qsTr("Selecciona el ejecutable de Java de esta instancia")
+        nameFilters: Qt.platform.os === "windows" ? ["Java (java.exe javaw.exe)"] : ["Java (java)"]
         onAccepted: root.save({ javaPath: selectedFile }, qsTr("Java guardado."), javaFeedback)
     }
 

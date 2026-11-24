@@ -338,6 +338,18 @@ int main(int argc, char *argv[]) {
                 { QFile f(app.path() + "/portable.txt"); if (!f.open(QIODevice::WriteOnly)) return 34; }
                 const auto portableData = M::portableDirectory(app.path());
                 if (portableData != QDir::cleanPath(QFileInfo(app.path() + "/data").canonicalFilePath()) || !QFileInfo(portableData).isDir()) return 34;
+#ifdef Q_OS_LINUX
+                const auto originalImage = qgetenv("APPIMAGE");
+                if (!originalImage.isEmpty()) {
+                    QFile image(QDir(app.path()).filePath("OpenClient.AppImage"));
+                    if (!image.open(QIODevice::WriteOnly)) return 34;
+                    image.close();
+                    qputenv("APPIMAGE", QFile::encodeName(image.fileName()));
+                    const auto imageData = M::portableDirectory(QCoreApplication::applicationDirPath());
+                    qputenv("APPIMAGE", originalImage);
+                    if (imageData != portableData) return 34;
+                }
+#endif
             }
             // Auto-actualización: solo se reemplaza una instalación hecha con el instalador, y el instalador recibe
             // el proceso que debe esperar y la carpeta exacta.
@@ -348,7 +360,7 @@ int main(int argc, char *argv[]) {
                 { QFile f(install.path() + "/Desinstalar-OpenClient.exe"); if (!f.open(QIODevice::WriteOnly)) return 41; }
                 if (M::installRoot(install.path() + "/bin") != QDir::cleanPath(install.path())) return 41;
                 const auto args = M::updateArguments(4321, "C:/Programas/OpenClient");
-                if (args != QStringList{"--silent", "--update=4321", "--dir=C:\\Programas\\OpenClient"}) return 41;
+                if (args != QStringList{"--silent", "--update=4321", "--dir=" + QDir::toNativeSeparators("C:/Programas/OpenClient")}) return 41;
                 if (!maintenance.autoUpdate() || !maintenance.updateStage().isEmpty()) return 41;
                 maintenance.setAutoUpdate(false);
                 if (maintenance.autoUpdate() || QSettings(QDir(data).filePath("maintenance.ini"), QSettings::IniFormat).value("updates/auto").toBool()) return 41;

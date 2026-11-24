@@ -104,7 +104,7 @@ ColumnLayout {
                 text: {
                     if (root.pack.error) return root.pack.error
                     switch (root.pack.state) {
-                    case "missing": return qsTr("No se encontró el archivo del modpack. Copia el .mrpack como modpack/official.mrpack junto a openclient-qt.exe.")
+                    case "missing": return qsTr("No se encontró el archivo del modpack. Copia el .mrpack como modpack/official.mrpack junto al ejecutable de OpenClient.")
                     case "download": return qsTr("El modpack oficial se descarga una sola vez (%1 MB) y se comprueba su integridad antes de instalarlo.").arg(root.pack.downloadSizeMb)
                     case "ready": return qsTr("Listo para instalar. OpenClient descarga los mods desde Modrinth y aplica las configuraciones incluidas.")
                     case "update": return qsTr("Tienes la v%1 y hay una v%2. Al actualizar, OpenClient guarda antes una copia de seguridad por si quieres volver atrás. Tus mundos no se sobrescriben.")

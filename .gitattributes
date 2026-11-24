@@ -13,6 +13,7 @@
 *.cpp text eol=lf
 *.h text eol=lf
 *.ps1 text eol=crlf
+*.sh text eol=lf
 *.bat text eol=crlf
 *.png binary
 *.gif binary

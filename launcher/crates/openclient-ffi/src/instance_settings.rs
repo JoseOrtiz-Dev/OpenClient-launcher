@@ -29,7 +29,7 @@ fn java_path(value: &str) -> Result<String, String> {
         || !path.is_file()
         || value.chars().any(char::is_control)
     {
-        return Err("Elige el archivo java.exe de una instalación de Java.".into());
+        return Err("Elige el ejecutable de una instalación de Java.".into());
     }
     Ok(value.to_owned())
 }

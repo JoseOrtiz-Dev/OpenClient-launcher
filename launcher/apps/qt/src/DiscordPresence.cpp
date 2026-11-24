@@ -5,6 +5,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHostAddress>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -130,7 +131,21 @@ void DiscordPresence::setPage(const QString &page) {
 void DiscordPresence::connectPipe() {
     if (!m_enabled || !available() || m_socket.state() != QLocalSocket::UnconnectedState) return;
     m_connecting = true;
-    m_socket.connectToServer(QStringLiteral("discord-ipc-%1").arg(m_pipe));
+    auto address = QStringLiteral("discord-ipc-%1").arg(m_pipe);
+#ifndef Q_OS_WIN
+    const auto runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
+    const auto temporary = QDir::tempPath();
+    const QStringList directories{runtime, temporary, "/tmp", runtime + "/app/com.discordapp.Discord"};
+    for (const auto &directory : directories) {
+        if (directory.isEmpty()) continue;
+        const auto candidate = QDir(directory).filePath(address);
+        if (QFileInfo::exists(candidate)) {
+            address = candidate;
+            break;
+        }
+    }
+#endif
+    m_socket.connectToServer(address);
 }
 
 QByteArray DiscordPresence::frame(quint32 opcode, const QJsonObject &payload) {

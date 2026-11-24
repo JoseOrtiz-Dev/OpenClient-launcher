@@ -14,6 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  unix:
+    uses: ./.github/workflows/unix.yml
+
   repositorio:
     name: Comprobar repositorio
     runs-on: ubuntu-latest

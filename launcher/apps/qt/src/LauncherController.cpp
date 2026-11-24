@@ -792,7 +792,12 @@ bool LauncherController::setJavaPath(int major, const QUrl &url) {
     }
     const QFileInfo file(url.toLocalFile());
     const auto name = file.fileName().toLower();
-    if (!url.isLocalFile() || !file.isFile() || (name != "java.exe" && name != "javaw.exe")) return false;
+#ifdef Q_OS_WIN
+    const bool validJava = name == "java.exe" || name == "javaw.exe";
+#else
+    const bool validJava = name == "java" && file.isExecutable();
+#endif
+    if (!url.isLocalFile() || !file.isFile() || !validJava) return false;
     QString error;
     const auto verified = requestEngine({{"action", "java_check"}, {"root", m_libraryRoot},
                                          {"major", major}, {"path", file.absoluteFilePath()}}, error);
@@ -870,9 +875,24 @@ void LauncherController::setAllocatedRamMb(int value) {
     persist();
 }
 
+namespace {
+QString engineLibraryPath() {
+    const QDir application(QCoreApplication::applicationDirPath());
+#ifdef Q_OS_WIN
+    return application.filePath("openclient_ffi.dll");
+#elif defined(Q_OS_MACOS)
+    const auto bundled = application.filePath("../Frameworks/libopenclient_ffi.dylib");
+    return QFileInfo(bundled).isFile() ? QDir::cleanPath(bundled)
+                                       : application.filePath("libopenclient_ffi.dylib");
+#else
+    return application.filePath("libopenclient_ffi.so");
+#endif
+}
+}
+
 QVariantMap LauncherController::readHardware() {
     // Cargar solo la biblioteca del propio directorio, nunca una ruta suministrada por QML.
-    QLibrary library(QDir(QCoreApplication::applicationDirPath()).filePath("openclient_ffi.dll"));
+    QLibrary library(engineLibraryPath());
     library.setLoadHints(QLibrary::PreventUnloadHint);
     if (!library.load()) return {{"error", "No se pudo cargar el motor Rust de esta compilación."}};
     using Version = unsigned int (*)();
@@ -917,7 +937,7 @@ QVariant LauncherController::requestEngine(const QVariantMap &request, QString &
         error = message;
         return {};
     };
-    QLibrary library(QDir(QCoreApplication::applicationDirPath()).filePath("openclient_ffi.dll"));
+    QLibrary library(engineLibraryPath());
     library.setLoadHints(QLibrary::PreventUnloadHint);
     if (!library.load()) return fail("No se pudo cargar el motor Rust.");
     using Operation = char *(*)(const char *, size_t);
@@ -1574,8 +1594,13 @@ QString LauncherController::officialPackCachePath() const {
 
 QString LauncherController::officialPackPath() const {
     // Un pack junto al programa o indicado por variable de entorno tiene prioridad sobre la descarga.
-    const QStringList candidates = {qEnvironmentVariable("OPENCLIENT_OFFICIAL_PACK"),
-                                    QDir(QCoreApplication::applicationDirPath()).filePath("modpack/official.mrpack")};
+    const QDir application(QCoreApplication::applicationDirPath());
+#ifdef Q_OS_MACOS
+    const auto bundledPack = application.filePath("../Resources/modpack/official.mrpack");
+#else
+    const auto bundledPack = application.filePath("modpack/official.mrpack");
+#endif
+    const QStringList candidates = {qEnvironmentVariable("OPENCLIENT_OFFICIAL_PACK"), bundledPack};
     for (const auto &candidate : candidates) {
         const QFileInfo info(candidate);
         if (!candidate.isEmpty() && info.isFile() && info.suffix().compare("mrpack", Qt::CaseInsensitive) == 0)

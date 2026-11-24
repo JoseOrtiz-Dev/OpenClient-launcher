@@ -115,8 +115,23 @@ MaintenanceController::MaintenanceController(LauncherController *launcher, const
 }
 
 QString MaintenanceController::portableDirectory(const QString &appDirectory) {
-    if (!QFileInfo(QDir(appDirectory).filePath("portable.txt")).isFile()) return {};
-    const auto data = QDir(appDirectory).filePath("data");
+    QDir directory(appDirectory);
+#ifdef Q_OS_MACOS
+    QDir parent(directory);
+    if (parent.dirName() == "MacOS" && parent.cdUp() && parent.dirName() == "Contents"
+        && parent.cdUp() && parent.dirName().endsWith(".app") && parent.cdUp()) {
+        directory = parent;
+    }
+#elif defined(Q_OS_LINUX)
+    const auto appDir = qEnvironmentVariable("APPDIR");
+    const QFileInfo image(qEnvironmentVariable("APPIMAGE"));
+    if (!appDir.isEmpty() && image.isAbsolute() && image.isFile()) {
+        const auto mountedBin = QDir(QDir(appDir).filePath("bin")).canonicalPath();
+        if (!mountedBin.isEmpty() && mountedBin == directory.canonicalPath()) directory = image.absoluteDir();
+    }
+#endif
+    if (!QFileInfo(directory.filePath("portable.txt")).isFile()) return {};
+    const auto data = directory.filePath("data");
     if (QFileInfo(data).exists() ? false : !QDir().mkpath(data)) return {};
     const QFileInfo info(data);
     if (!info.isDir() || !info.isWritable() || isLink(info)) return {};
@@ -456,11 +471,27 @@ void MaintenanceController::checkForUpdates() {
             } else if (!result.value("available").toBool()) {
                 m_updateMessage = QString("Tienes la versión más reciente (%1).").arg(QCoreApplication::applicationVersion());
             } else {
-                const QUrl download(result.value("url").toString());
+                QUrl download(result.value("url").toString());
                 if (download.host() == manifest.host() || download.host() == "github.com") {
-                    m_updateUrl = download.toString();
+#ifdef Q_OS_WIN
                     m_updateSha256 = result.value("sha256").toString();
                     m_updateSize = result.value("size").toLongLong();
+#else
+                    // El manifiesto lleva el instalador de Windows. En Linux y macOS se abre
+                    // la página con los paquetes de esa misma versión.
+                    const auto releasePath = download.path();
+                    const auto marker = QStringLiteral("/releases/download/");
+                    const auto position = releasePath.indexOf(marker);
+                    if (download.host() == "github.com" && position >= 0) {
+                        const auto tag = releasePath.mid(position + marker.size()).section('/', 0, 0);
+                        download.setPath(releasePath.left(position) + "/releases/tag/" + tag);
+                        download.setQuery(QString());
+                        download.setFragment(QString());
+                    } else {
+                        download = QUrl(m_launcher ? m_launcher->linkUrl(3) + "/releases" : QString());
+                    }
+#endif
+                    m_updateUrl = download.toString();
                     m_updateVersion = result.value("version").toString();
                     m_updateMessage = QString("Hay una versión nueva: %1.").arg(m_updateVersion);
                 } else {

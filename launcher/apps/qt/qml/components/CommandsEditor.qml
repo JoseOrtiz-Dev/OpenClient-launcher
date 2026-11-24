@@ -46,7 +46,7 @@ ColumnLayout {
         maximumLength: 512
         Accessible.name: "Comando posterior"
     }
-    Label { text: qsTr("Comando envoltorio (se antepone a java.exe)"); color: Theme.ink; font.pixelSize: 13 }
+    Label { text: qsTr("Comando envoltorio (se antepone al ejecutable de Java)"); color: Theme.ink; font.pixelSize: 13 }
     GlassField {
         id: wrapperField
         Layout.fillWidth: true

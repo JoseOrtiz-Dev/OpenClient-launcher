@@ -1,6 +1,7 @@
 # Puente Rust / C++
 
-Biblioteca dinámica Windows x64 con ABI versión 3.
+Biblioteca dinámica con ABI versión 3. Qt carga `openclient_ffi.dll` en Windows,
+`libopenclient_ffi.so` en Linux y `libopenclient_ffi.dylib` en macOS.
 
 | Símbolo C | Resultado |
 | --- | --- |
