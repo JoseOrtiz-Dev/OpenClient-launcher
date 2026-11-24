@@ -20,18 +20,14 @@ pub const TEXT_LIMIT: usize = 128;
 
 /// Enlace simbólico o, en Windows, cualquier punto de reanálisis (junction, etc.).
 pub fn is_link(metadata: &fs::Metadata) -> bool {
-    if metadata.file_type().is_symlink() {
-        return true;
-    }
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;
-        metadata.file_attributes() & 0x400 != 0
+        if metadata.file_attributes() & 0x400 != 0 {
+            return true;
+        }
     }
-    #[cfg(not(windows))]
-    {
-        false
-    }
+    metadata.file_type().is_symlink()
 }
 
 /// `(sha1, sha512, tamaño)` leyendo el archivo una sola vez, por bloques.

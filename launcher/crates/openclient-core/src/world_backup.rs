@@ -6,7 +6,7 @@
 //! valida todo antes de tocar nada, guarda antes una copia automática de lo que va a
 //! reemplazar y deja el mundo anterior en su sitio si el cambio falla a medias.
 
-use crate::{modpack::file_path, GameContext};
+use crate::{content_meta::is_link, modpack::file_path, GameContext};
 use serde_json::{json, Value};
 use std::{
     collections::HashSet,
@@ -69,21 +69,6 @@ pub enum Outcome {
 struct Dirs {
     saves: PathBuf,
     backups: PathBuf,
-}
-
-fn is_link(meta: &fs::Metadata) -> bool {
-    if meta.file_type().is_symlink() {
-        return true;
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        meta.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
-    {
-        false
-    }
 }
 
 /// `None` si no existe; error si es un enlace.
