@@ -212,9 +212,15 @@ ColumnLayout {
                 onClicked: launcher.toggleFavorite(root.instance.id)
             }
             ActionButton {
-                text: qsTr("Jugar"); glyph: "play"; primary: true
-                enabled: root.instance !== null && !launcher.gameBusy
-                onClicked: launcher.playInstance(root.instance.id)
+                readonly property bool running: !!root.instance && launcher.runningInstanceIds.indexOf(root.instance.id) !== -1
+                readonly property bool preparing: !!root.instance && launcher.preparingInstanceId === root.instance.id
+                text: running ? qsTranslate("PlayButton", "En juego")
+                    : preparing ? qsTranslate("PlayButton", "Preparando %1 %").arg(launcher.gamePercent)
+                    : launcher.gameRunning ? qsTranslate("PlayButton", "Abrir con cuenta…")
+                    : qsTr("Jugar")
+                glyph: "play"; primary: true
+                enabled: !!root.instance && !running && !launcher.preparingInstanceId.length && !launcher.catalogBusy
+                onClicked: launcher.requestPlayInstance(root.instance.id)
             }
         }
     }
@@ -941,7 +947,8 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 420
                 Layout.preferredHeight: 34
-                enabled: !!root.instance && !launcher.gameBusy
+                enabled: !!root.instance && launcher.preparingInstanceId !== root.instance.id
+                    && launcher.runningInstanceIds.indexOf(root.instance.id) === -1
                 model: choices
                 textRole: "label"
                 currentIndex: Math.max(0, choices.findIndex(item => own ? item.kind === own.kind && item.key === own.key : item.kind === ""))

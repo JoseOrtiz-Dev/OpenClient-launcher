@@ -65,7 +65,7 @@ fn launcher_operation(request: &Value) -> Result<Value, String> {
     }
     match request["action"].as_str() {
         Some("launch") => return game::launch(request),
-        Some("game_status") => return Ok(game::status()),
+        Some("game_status") => return Ok(game::status(request)),
         Some("game_log") => return game::read_log(request),
         Some("crash_analyze") => return crash::analyze_crash(request),
         Some("world_list") => return worlds::list(request),

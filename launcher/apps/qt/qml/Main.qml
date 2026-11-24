@@ -96,6 +96,9 @@ ApplicationWindow {
         function onGameCrashed(instanceId, exitCode) {
             crashNotice.show(instanceId, exitCode)
         }
+        function onLaunchAccountRequested(instanceId) {
+            launchAccountDialog.openForInstance(instanceId)
+        }
         function onRefocusRequested() {
             if (window.visibility === Window.Minimized) {
                 if (window.wasMaximized) window.showMaximized()
@@ -695,6 +698,91 @@ ApplicationWindow {
             window.openDiscovery("modpack", "")
         }
     }
+    GlassDialog {
+        id: launchAccountDialog
+        objectName: "launchAccountDialog"
+        anchors.centerIn: parent
+        width: Math.min(500, window.width - 32)
+        focus: true
+        title: qsTr("Abrir instancia con la siguiente cuenta")
+        glyph: "play"
+        property string instanceId: ""
+        property var accounts: []
+        readonly property var instance: launcher.instances.find(item => item.id === instanceId)
+
+        function openForInstance(id) {
+            instanceId = id
+            const list = []
+            for (const item of launcher.microsoftAccounts) {
+                if (item.status === "ok" && !launcher.microsoftBusy
+                        && (item.id !== launcher.microsoftAccountId || !launcher.microsoftNeedsLogin)) {
+                    list.push({ kind: "microsoft", key: item.id,
+                                label: qsTranslate("InstanceDetails", "%1 · Microsoft").arg(item.username) })
+                }
+            }
+            for (const name of launcher.offlineProfiles)
+                list.push({ kind: "offline", key: name,
+                            label: qsTranslate("InstanceDetails", "%1 · Offline").arg(name) })
+            accounts = list
+            const assigned = launcher.instanceAccounts[id]
+            launchAccountChoice.currentIndex = assigned
+                ? list.findIndex(item => item.kind === assigned.kind && item.key === assigned.key)
+                : -1
+            open()
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                visible: !!launchAccountDialog.instance
+                text: launchAccountDialog.instance ? launchAccountDialog.instance.name : ""
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                color: Theme.ink
+                font.weight: Font.DemiBold
+            }
+            GlassComboBox {
+                id: launchAccountChoice
+                objectName: "launchAccountChoice"
+                Layout.fillWidth: true
+                model: launchAccountDialog.accounts
+                textRole: "label"
+                displayText: currentIndex >= 0 ? currentText : qsTr("Selecciona una cuenta")
+                enabled: count > 0
+                Accessible.name: qsTr("Cuenta para este lanzamiento")
+            }
+            Label {
+                Layout.fillWidth: true
+                visible: launchAccountChoice.count === 0
+                text: qsTr("Añade o reconecta una cuenta desde Cuenta.")
+                color: Theme.dim
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                ActionButton {
+                    text: qsTranslate("AccountDialog", "Cancelar")
+                    onClicked: launchAccountDialog.close()
+                }
+                ActionButton {
+                    objectName: "confirmLaunchAccount"
+                    text: qsTr("Abrir instancia")
+                    glyph: "play"
+                    primary: true
+                    enabled: launchAccountChoice.currentIndex >= 0
+                        && launchAccountChoice.currentIndex < launchAccountChoice.count
+                        && !launcher.preparingInstanceId.length && !launcher.catalogBusy
+                    onClicked: {
+                        const account = launchAccountDialog.accounts[launchAccountChoice.currentIndex]
+                        launcher.playInstanceWithAccount(launchAccountDialog.instanceId, account.kind, account.key)
+                        launchAccountDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
     AccountDialog {
         id: accountDialog
         objectName: "mainAccountDialog"

@@ -9,6 +9,8 @@ ColumnLayout {
     spacing: 16
     readonly property var pack: launcher.officialPack
     readonly property bool working: launcher.copyingInstance || launcher.gameBusy || launcher.catalogBusy
+    readonly property bool running: launcher.runningInstanceIds.indexOf(pack.installedId) !== -1
+    readonly property bool preparing: !!pack.installedId && launcher.preparingInstanceId === pack.installedId
     readonly property int totalItems: (pack.mods || []).length + (pack.shaders || []).length + (pack.resourcepacks || []).length
     Component.onCompleted: launcher.inspectOfficialPack()
 
@@ -135,11 +137,14 @@ ColumnLayout {
                 spacing: 10
                 ActionButton {
                     visible: root.pack.state === "installed" || root.pack.state === "update"
-                    text: root.pack.state === "update" ? qsTr("Jugar v%1").arg(root.pack.installedVersion) : qsTr("Jugar")
+                    text: root.running ? qsTranslate("PlayButton", "En juego")
+                        : root.preparing ? qsTranslate("PlayButton", "Preparando %1 %").arg(launcher.gamePercent)
+                        : launcher.gameRunning ? qsTranslate("PlayButton", "Abrir con cuenta…")
+                        : root.pack.state === "update" ? qsTr("Jugar v%1").arg(root.pack.installedVersion) : qsTr("Jugar")
                     glyph: "play"
                     primary: root.pack.state === "installed"
-                    enabled: !root.working
-                    onClicked: launcher.playInstance(root.pack.installedId)
+                    enabled: !root.running && !launcher.preparingInstanceId.length && !launcher.copyingInstance && !launcher.catalogBusy
+                    onClicked: launcher.requestPlayInstance(root.pack.installedId)
                 }
                 ActionButton {
                     visible: root.pack.state === "ready" || root.pack.state === "update" || root.pack.state === "download"

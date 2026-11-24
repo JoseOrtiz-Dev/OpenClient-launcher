@@ -10,6 +10,7 @@ Item {
     id: root
     objectName: "playButton"
     property bool hasInstance: false
+    property string instanceId: ""
     property string instanceLabel: ""            // «Prueba visual · Fabric 1.21.4»
     property string emptyLabel: qsTr("Crear instancia") // texto sin instancia («Instalar DiosesMC»)
     property string emptyGlyph: "plus"
@@ -23,10 +24,10 @@ Item {
     signal empty()
 
     readonly property string mode: forceMode.length ? forceMode
-        : launcher.gameRunning ? "running"
-        : launcher.gameBusy ? "preparing"
+        : launcher.runningInstanceIds.indexOf(instanceId) !== -1 ? "running"
+        : instanceId.length && launcher.preparingInstanceId === instanceId ? "preparing"
         : !hasInstance ? "none"
-        : launcher.usingMicrosoft && launcher.microsoftNeedsLogin ? "session"
+        : !launcher.gameRunning && !launcher.instanceAccounts[instanceId] && launcher.usingMicrosoft && launcher.microsoftNeedsLogin ? "session"
         : "ready"
     readonly property int percent: forcePercent >= 0 ? forcePercent : Math.max(0, Math.min(100, launcher.gamePercent))
     readonly property bool clickable: mode === "ready" || mode === "none" || mode === "session"
@@ -36,7 +37,7 @@ Item {
         : mode === "running" ? qsTr("Minecraft está abierto")
         : (launcher.accountError || qsTr("Tu sesión de Microsoft caducó"))
     readonly property string label: mode === "none" ? emptyLabel
-        : mode === "ready" ? qsTr("INICIAR")
+        : mode === "ready" ? (launcher.gameRunning ? qsTr("Abrir con cuenta…") : qsTr("INICIAR"))
         : mode === "preparing" ? qsTr("Preparando %1 %").arg(percent)
         : mode === "running" ? qsTr("En juego")
         : qsTr("Volver a entrar")

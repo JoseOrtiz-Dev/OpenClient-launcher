@@ -262,14 +262,16 @@ LauncherController::LauncherController(const QString &settingsFile, QObject *par
             m_gameMessage = error.startsWith("CANCELLED:") ? QString("Operación cancelada.") : error;
             if (error.startsWith("SESSION_REAUTH:") || error.startsWith("SESSION_NETWORK:")) {
                 m_gameMessage = error.section(':', 1).trimmed();
-                if (m_useMicrosoft) {
+                if (m_useMicrosoft && m_launchAccountId == m_microsoftId) {
                     m_microsoftNeedsLogin = error.startsWith("SESSION_REAUTH:");
                     m_microsoftMessage = m_gameMessage;
                     emit accountChanged();
                 }
             }
-            m_gameTimer.stop();
-            m_gameLock.reset();
+            QString ignored;
+            requestEngine({{"action", "game_status"}, {"id", m_preparingId}, {"consume", true}}, ignored);
+            m_preparingId.clear();
+            releaseGameLockIfIdle();
             emit gameChanged();
             return;
         }
@@ -896,7 +898,8 @@ QVariantMap LauncherController::readHardware() {
 bool LauncherController::updateLibrary(QVariantMap request) {
     QLockFile lock(QDir(m_libraryRoot).filePath("library.lock"));
     lock.setStaleLockTime(0);
-    if (gameBusy() || !lock.tryLock()) {
+    const bool readingUnderGameLock = gameBusy() && request.value("action").toString() == "list";
+    if (!readingUnderGameLock && (gameBusy() || !lock.tryLock())) {
         m_libraryError = "La biblioteca está ocupada. Inténtalo de nuevo.";
         emit libraryChanged();
         return false;
@@ -935,20 +938,36 @@ QVariant LauncherController::requestEngine(const QVariantMap &request, QString &
     return result.value("result").toVariant();
 }
 
+void LauncherController::requestPlayInstance(const QString &id) {
+    if (gameRunning() && !id.isEmpty() && m_preparingId.isEmpty() && !m_runningIds.contains(id) && !catalogBusy()) {
+        emit launchAccountRequested(id);
+    } else {
+        playInstance(id);
+    }
+}
+
 void LauncherController::playInstance(const QString &id) {
-    if (gameBusy()) return;
+    launchInstance(id, m_instanceAccounts.value(id).toMap());
+}
+
+void LauncherController::playInstanceWithAccount(const QString &id, const QString &kind, const QString &key) {
+    launchInstance(id, {{"kind", kind}, {"key", key}});
+}
+
+void LauncherController::launchInstance(const QString &id, const QVariantMap &account) {
+    if (id.isEmpty() || !m_preparingId.isEmpty() || m_runningIds.contains(id)) return;
     if (catalogBusy()) {
         m_gameMessage = "Espera a que termine la operación de contenido.";
         emit gameChanged();
         return;
     }
-    // Cuenta efectiva: la propia de la instancia, si tiene; si no, la activa del launcher.
+    // Cuenta elegida para este lanzamiento, asignada a la instancia o activa del launcher.
     bool useMicrosoft = m_useMicrosoft;
     QString username = m_accountName;
     QString microsoftId = m_microsoftId;
-    if (const auto own = m_instanceAccounts.value(id).toMap(); !own.isEmpty()) {
-        const auto kind = own.value("kind").toString();
-        const auto key = own.value("key").toString();
+    if (!account.isEmpty()) {
+        const auto kind = account.value("kind").toString();
+        const auto key = account.value("key").toString();
         QVariantMap entry;
         for (const auto &candidate : std::as_const(m_microsoftAccounts))
             if (candidate.toMap().value("id").toString() == key) entry = candidate.toMap();
@@ -970,18 +989,21 @@ void LauncherController::playInstance(const QString &id) {
         emit gameChanged();
         return;
     }
-    auto lock = std::make_unique<QLockFile>(QDir(m_libraryRoot).filePath("library.lock"));
-    lock->setStaleLockTime(0);
-    if (!lock->tryLock()) {
-        m_gameMessage = "La biblioteca está en uso por otra ventana.";
-        emit gameChanged();
-        return;
+    if (!m_gameLock) {
+        auto lock = std::make_unique<QLockFile>(QDir(m_libraryRoot).filePath("library.lock"));
+        lock->setStaleLockTime(0);
+        if (!lock->tryLock()) {
+            m_gameMessage = "La biblioteca está en uso por otra ventana.";
+            emit gameChanged();
+            return;
+        }
+        m_gameLock = std::move(lock);
     }
-    m_gameLock = std::move(lock);
-    m_playingId = id;
-    m_gameMessage = "Preparando Minecraft…";
+    m_preparingId = id;
+    m_launchAccountId = useMicrosoft ? microsoftId : QString();
+    m_gameMessage.clear();
+    m_launchMessage = "Preparando Minecraft…";
     m_gamePercent = 0;
-    m_gameWasRunning = false;
     m_launchPending = true;
     emit gameChanged();
     const QVariantMap request = {{"action", "launch"}, {"root", m_libraryRoot},
@@ -1006,32 +1028,60 @@ void LauncherController::playInstance(const QString &id) {
 
 void LauncherController::pollGame() {
     if (!gameBusy()) return;
-    QString error;
-    const auto state = requestEngine({{"action", "game_status"}}, error).toMap();
-    if (!error.isEmpty()) return;
-    const auto phase = state.value("phase").toString();
-    if (phase == "idle" && m_launchPending) return;
-    m_gameMessage = state.value("message").toString();
-    m_gamePercent = phase == "running" ? 100 : state.value("percent").toInt();
-    if (phase == "running" && !m_gameWasRunning) {
-        m_gameWasRunning = true;
-        if (m_minimizeOnLaunch) emit minimizeRequested();
-    }
-    if (phase == "idle") {
-        m_gameTimer.stop();
-        m_gameLock.reset();
-        if (m_gameWasRunning) {
-            reloadLibrary();
-            const auto exitCode = state.value("exitCode");
-            if (m_crashReport && exitCode.isValid() && !exitCode.isNull() && exitCode.toInt() != 0) {
-                analyzeCrash(state.value("instanceId").toString());
-                emit gameCrashed(state.value("instanceId").toString(), exitCode.toInt());
+    auto ids = m_runningIds;
+    if (!m_preparingId.isEmpty()) ids.append(m_preparingId);
+    bool startedGame = false;
+    QStringList exitedGames;
+    QList<QPair<QString, int>> crashes;
+    for (const auto &id : std::as_const(ids)) {
+        const bool preparing = id == m_preparingId;
+        const bool pending = preparing && m_launchPending;
+        QString error;
+        const auto state = requestEngine({{"action", "game_status"}, {"id", id}, {"consume", !pending}}, error).toMap();
+        if (!error.isEmpty() || state.value("instanceId").toString() != id) continue;
+        const auto phase = state.value("phase").toString();
+        if (preparing && phase == "preparing") {
+            m_launchMessage = state.value("message").toString();
+            m_gamePercent = state.value("percent").toInt();
+        } else if (preparing && !pending && phase == "running") {
+            m_preparingId.clear();
+            m_runningIds.append(id);
+            m_gamePercent = 100;
+            startedGame = true;
+        } else if (!pending && phase == "idle" && state.contains("exitCode")) {
+            if (preparing) m_preparingId.clear();
+            m_runningIds.removeOne(id);
+            m_gameMessage = state.value("message").toString();
+            if (ids.size() > 1) {
+                const auto name = instanceEntry(id).value("name").toString();
+                if (!name.isEmpty()) m_gameMessage.prepend(name + " · ");
             }
-            if (m_refocusOnExit) emit refocusRequested();
+            exitedGames.append(id);
+            const auto exitCode = state.value("exitCode");
+            if (m_crashReport && !exitCode.isNull() && exitCode.toInt() != 0)
+                crashes.append({id, exitCode.toInt()});
         }
-        m_gameWasRunning = false;
+    }
+    releaseGameLockIfIdle();
+    if (!exitedGames.isEmpty()) {
+        reloadLibrary();
+        if (gameBusy()) {
+            for (const auto &id : std::as_const(exitedGames)) requestBanner(id);
+        }
     }
     emit gameChanged();
+    if (startedGame && m_minimizeOnLaunch) emit minimizeRequested();
+    else if (!exitedGames.isEmpty() && m_refocusOnExit) emit refocusRequested();
+    for (const auto &[id, code] : std::as_const(crashes)) {
+        analyzeCrash(id);
+        emit gameCrashed(id, code);
+    }
+}
+
+void LauncherController::releaseGameLockIfIdle() {
+    if (!m_preparingId.isEmpty() || gameRunning()) return;
+    m_gameTimer.stop();
+    m_gameLock.reset();
 }
 
 QString LauncherController::instanceLog(const QString &id) {
@@ -1121,7 +1171,7 @@ void LauncherController::dropInstanceAccounts(const QString &kind, const QString
 }
 
 bool LauncherController::setInstanceAccount(const QString &instanceId, const QString &kind, const QString &key) {
-    if (instanceId.isEmpty() || gameBusy()) return false;
+    if (instanceId.isEmpty() || m_preparingId == instanceId || m_runningIds.contains(instanceId)) return false;
     const auto previous = m_instanceAccounts;
     if (kind.isEmpty()) {
         m_instanceAccounts.remove(instanceId);
@@ -1771,11 +1821,11 @@ void LauncherController::cancelOperation() {
 }
 
 void LauncherController::cancelLaunch() {
-    if (!gameBusy()) return;
+    if (m_preparingId.isEmpty()) return;
     QString error;
     const auto result = requestEngine({{"action", "operation_cancel"}, {"target", "game"}}, error).toMap();
     if (error.isEmpty() && result.value("cancelled").toBool()) {
-        m_gameMessage = "Cancelando…";
+        m_launchMessage = "Cancelando…";
         emit gameChanged();
     }
 }

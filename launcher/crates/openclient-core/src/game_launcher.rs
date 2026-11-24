@@ -1669,6 +1669,7 @@ pub async fn launch_game<
     let versions_dir = root.join("versions");
     let libs_dir = root.join("libraries");
     let assets_dir = root.join("assets");
+    let game_dir = instance_game_dir(root, &request.instance_id)?;
 
     // 2) Versión de Minecraft
     emit(
@@ -1839,7 +1840,7 @@ pub async fn launch_game<
     app.cancel.check()?;
 
     // Natives (versiones antiguas)
-    let natives_dir = versions_dir.join(&mc).join("natives");
+    let natives_dir = game_dir.join(".openclient").join("natives").join(&mc);
     {
         let jars = native_jars.clone();
         let dest = natives_dir.clone();
@@ -1919,7 +1920,6 @@ pub async fn launch_game<
     app.cancel.check()?;
 
     // 6) Carpeta de la instancia + mods
-    let game_dir = instance_game_dir(root, &request.instance_id)?;
     tokio::fs::create_dir_all(&game_dir)
         .await
         .map_err(|e| format!("No se pudo crear la carpeta de la instancia: {}", e))?;

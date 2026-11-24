@@ -186,20 +186,20 @@ void DiscordPresence::push() {
 }
 
 void DiscordPresence::followGame() {
-    const bool running = m_launcher->gameRunning();
-    if (running && !m_running) {
+    const auto id = m_launcher->gameRunning() ? m_launcher->playingInstanceId() : QString();
+    if (!id.isEmpty() && id != m_playingInstanceId) {
         m_playingSince = QDateTime::currentSecsSinceEpoch();
         m_session = {};
         m_logOffset = 0;
         m_logRest.clear();
         m_logPath = QDir(m_launcher->dataDirectory())
-            .filePath(QStringLiteral("instances/%1/logs/openclient-latest.log").arg(m_launcher->playingInstanceId()));
+            .filePath(QStringLiteral("instances/%1/logs/openclient-latest.log").arg(id));
         m_logTimer.start();
-    } else if (!running && m_running) {
+    } else if (id.isEmpty() && !m_playingInstanceId.isEmpty()) {
         m_logTimer.stop();
         m_session = {};
     }
-    m_running = running;
+    m_playingInstanceId = id;
     schedule();
 }
 
@@ -272,7 +272,7 @@ QJsonObject DiscordPresence::activity() const {
         const auto loader = entry.value("loaderLabel").toString();
         auto edition = "Minecraft " + entry.value("mcVersion").toString();
         if (category != "vanilla" && !loader.isEmpty()) edition += " · " + loader;
-        if (m_running) {
+        if (!m_playingInstanceId.isEmpty()) {
             result["details"] = fit(edition);
             result["state"] = fit(describe(m_session, m_showServer));
             result["timestamps"] = QJsonObject{{"start", m_playingSince}};

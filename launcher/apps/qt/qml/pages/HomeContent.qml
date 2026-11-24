@@ -330,11 +330,13 @@ ColumnLayout {
                     Layout.fillWidth: true
                     readonly property bool offerPack: !root.current && (root.pack.state === "ready" || root.pack.state === "download")
                     hasInstance: root.current !== null
+                    instanceId: root.current ? root.current.id : ""
                     instanceLabel: root.current ? qsTr("Minecraft %1 · %2").arg(root.current.mcVersion).arg(root.current.loaderLabel) : ""
                     emptyLabel: offerPack ? qsTr("Instalar %1").arg(root.pack.name || qsTr("modpack oficial")) : qsTr("Crear primera instancia")
                     emptyGlyph: offerPack ? "download" : "plus"
-                    busy: launcher.catalogBusy || launcher.copyingInstance
-                    onPlay: if (root.current) launcher.playInstance(root.current.id)
+                    busy: launcher.catalogBusy || launcher.copyingInstance || launcher.preparingInstanceId.length > 0
+                        || (!root.current && launcher.gameBusy)
+                    onPlay: if (root.current) launcher.requestPlayInstance(root.current.id)
                     onEmpty: if (offerPack) launcher.installOfficialPack(); else root.createRequested()
                     onCancel: launcher.cancelLaunch()
                     onReconnect: root.accountRequested()
@@ -357,7 +359,7 @@ ColumnLayout {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 40
                     visible: root.current !== null
-                    enabled: !launcher.gameBusy
+                    enabled: !launcher.preparingInstanceId.length
                     hoverEnabled: true
                     model: launcher.instances
                     textRole: "name"
@@ -401,7 +403,7 @@ ColumnLayout {
 
     Label {
         Layout.fillWidth: true
-        visible: launcher.gameMessage.length > 0 && !launcher.gameBusy
+        visible: launcher.gameMessage.length > 0 && !launcher.preparingInstanceId.length
         text: launcher.gameMessage
         textFormat: Text.PlainText
         color: Theme.dim

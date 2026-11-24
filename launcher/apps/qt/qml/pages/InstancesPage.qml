@@ -349,7 +349,7 @@ ColumnLayout {
             }
         }
         Label {
-            visible: launcher.gameMessage.length > 0 && !launcher.gameBusy
+            visible: launcher.gameMessage.length > 0 && !launcher.preparingInstanceId.length
             text: launcher.gameMessage
             textFormat: Text.PlainText
             color: Theme.ink
@@ -562,9 +562,15 @@ ColumnLayout {
                                 onClicked: root.openActions(card.modelData, optionsButton, 0, optionsButton.height + 6)
                             }
                             ActionButton {
-                                text: qsTr("Jugar"); glyph: "play"; compact: true; primary: true
-                                enabled: !launcher.gameBusy
-                                onClicked: launcher.playInstance(card.modelData.id)
+                                readonly property bool running: launcher.runningInstanceIds.indexOf(card.modelData.id) !== -1
+                                readonly property bool preparing: launcher.preparingInstanceId === card.modelData.id
+                                text: running ? qsTranslate("PlayButton", "En juego")
+                                    : preparing ? qsTranslate("PlayButton", "Preparando %1 %").arg(launcher.gamePercent)
+                                    : launcher.gameRunning ? qsTranslate("PlayButton", "Abrir con cuenta…")
+                                    : qsTr("Jugar")
+                                glyph: "play"; compact: true; primary: true
+                                enabled: !running && !launcher.preparingInstanceId.length && !launcher.catalogBusy
+                                onClicked: launcher.requestPlayInstance(card.modelData.id)
                             }
                         }
                     }
@@ -598,14 +604,19 @@ ColumnLayout {
         }
     }
     Label {
-        visible: root.current !== null && ((launcher.gameMessage.length > 0 && !launcher.gameBusy) || launcher.libraryError.length > 0)
+        visible: root.current !== null && ((launcher.gameMessage.length > 0 && !launcher.preparingInstanceId.length) || launcher.libraryError.length > 0)
         text: launcher.libraryError || launcher.gameMessage
         textFormat: Text.PlainText
         color: launcher.libraryError.length > 0 ? Theme.danger : Theme.ink
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
     }
-    OperationBar { visible: root.current !== null && launcher.gameBusy; Layout.fillWidth: true; game: true }
+    OperationBar {
+        visible: root.current !== null && active
+        Layout.fillWidth: true
+        game: true
+        instanceId: root.current ? root.current.id : ""
+    }
     NativeDialogs.FolderDialog {
         id: importFolder
         title: qsTr("Selecciona la carpeta exportada de OpenClient")

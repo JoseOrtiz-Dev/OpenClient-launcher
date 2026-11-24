@@ -169,6 +169,35 @@ int main(int argc, char *argv[]) {
         auto *account = engine.rootObjects().first()->findChild<QObject *>("mainAccountDialog");
         if (!account || !QMetaObject::invokeMethod(account, "open") ||
             !account->property("visible").toBool() || !QMetaObject::invokeMethod(account, "close")) return 19;
+        {
+            auto *root = engine.rootObjects().first();
+            auto *dialog = root->findChild<QObject *>("launchAccountDialog");
+            auto *choice = root->findChild<QObject *>("launchAccountChoice");
+            auto *confirm = root->findChild<QObject *>("confirmLaunchAccount");
+            const QString first = "11111111-1111-4111-8111-111111111111";
+            const QString second = "22222222-2222-4222-8222-222222222222";
+            const auto profiles = launcher.m_offlineProfiles;
+            const auto savedAccounts = launcher.instanceAccounts();
+            launcher.m_runningIds.append(first);
+            launcher.m_offlineProfiles = QStringList{"FirstPlayer", "SecondPlayer"};
+            emit launcher.accountChanged();
+            emit launcher.gameChanged();
+            launcher.requestPlayInstance(first);
+            if (!dialog || !choice || !confirm || dialog->property("visible").toBool()) return 45;
+            launcher.requestPlayInstance(second);
+            if (!dialog->property("visible").toBool() || dialog->property("instanceId").toString() != second
+                || choice->property("count").toInt() != 2 || confirm->property("enabled").toBool()) return 45;
+            if (!choice->setProperty("currentIndex", 1) || !confirm->property("enabled").toBool()
+                || !QMetaObject::invokeMethod(confirm, "clicked") || launcher.preparingInstanceId() != second
+                || launcher.instanceAccounts() != savedAccounts) return 45;
+            launcher.m_runningIds.clear();
+            launcher.m_offlineProfiles = profiles;
+            emit launcher.accountChanged();
+            launcher.m_launch.waitForFinished();
+            QCoreApplication::processEvents();
+            if (launcher.gameBusy()) return 45;
+            std::fprintf(stdout, "Launch account picker: second instance, explicit choice and saved accounts preserved\n");
+        }
         if (appIcon.pixmap(32, 32).isNull() || QImage(":/assets/openclient-logo.svg").isNull()) return 16;
         const auto testSkin = QDir(data).filePath("Prueba de skin.png");
         QImage texture(64, 64, QImage::Format_ARGB32);
@@ -549,8 +578,9 @@ int main(int argc, char *argv[]) {
             if (!launcher.m_banners->waitIdle(20000) || QFileInfo::exists(stored) || !valid(launcher.bannerInfo(demoId), "screenshot"))
                 return bannerFail("quitar personalizado");
         }
-        launcher.playInstance("00000000-0000-0000-0000-000000000000");
-        if (!launcher.gameBusy()) return 9;
+        const QString rejectedId = "00000000-0000-0000-0000-000000000000";
+        launcher.playInstance(rejectedId);
+        if (!launcher.gameBusy() || launcher.preparingInstanceId() != rejectedId) return 9;
         if (!launcher.property("gameRunning").isValid() || !launcher.property("playingInstanceId").isValid()) return 33;
         auto *root = engine.rootObjects().first();
         int page = 0;

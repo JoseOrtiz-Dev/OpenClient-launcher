@@ -2700,6 +2700,26 @@
 <context>
     <name>Main</name>
     <message>
+        <source>Abrir instancia con la siguiente cuenta</source>
+        <translation>Choose an account for this instance</translation>
+    </message>
+    <message>
+        <source>Selecciona una cuenta</source>
+        <translation>Select an account</translation>
+    </message>
+    <message>
+        <source>Cuenta para este lanzamiento</source>
+        <translation>Account for this launch</translation>
+    </message>
+    <message>
+        <source>Añade o reconecta una cuenta desde Cuenta.</source>
+        <translation>Add or reconnect an account in Account settings.</translation>
+    </message>
+    <message>
+        <source>Abrir instancia</source>
+        <translation>Launch instance</translation>
+    </message>
+    <message>
         <location filename="../qml/Main.qml" line="12"/>
         <source>OpenClient</source>
         <translation>OpenClient</translation>
@@ -3208,6 +3228,10 @@
 </context>
 <context>
     <name>PlayButton</name>
+    <message>
+        <source>Abrir con cuenta…</source>
+        <translation>Launch with account…</translation>
+    </message>
     <message>
         <location filename="../qml/components/PlayButton.qml" line="14"/>
         <source>Crear instancia</source>

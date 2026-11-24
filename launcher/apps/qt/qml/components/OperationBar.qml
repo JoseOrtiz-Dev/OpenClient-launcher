@@ -10,12 +10,14 @@ ColumnLayout {
     id: bar
     objectName: "operationBar"
     property bool game: false
+    property string instanceId: ""
     property string heading: ""
 
-    readonly property bool active: game ? launcher.gameBusy : launcher.operationActive
+    readonly property bool active: game ? launcher.preparingInstanceId.length > 0
+        && (!instanceId.length || launcher.preparingInstanceId === instanceId) : launcher.operationActive
     readonly property string message: game ? launcher.gameMessage : (launcher.operationMessage || heading)
     readonly property int percent: game ? (launcher.gamePercent > 0 ? launcher.gamePercent : -1) : launcher.operationPercent
-    readonly property bool cancellable: game ? launcher.gameBusy && launcher.gamePercent < 100 : launcher.operationCancellable
+    readonly property bool cancellable: game ? active && launcher.gamePercent < 100 : launcher.operationCancellable
 
     visible: active
     spacing: 6

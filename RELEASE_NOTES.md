@@ -1,3 +1,2 @@
-Instalador más ligero (unos 35 MB): el modpack oficial se descarga la primera vez y se verifica con SHA-256.
-Nuevo «Descargar e instalar» en Ajustes para actualizar el launcher desde la propia app.
-Discord Rich Presence, varias cuentas de Microsoft, copias de seguridad de mundos y analizador de crashes.
+﻿- Abre varias instancias de Minecraft al mismo tiempo con cuentas distintas.
+- Cuando una instancia está en juego, «Abrir con cuenta…» permite elegir la cuenta para el siguiente lanzamiento.

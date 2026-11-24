@@ -104,10 +104,7 @@ pub fn storage_operation(action: &str, request: &Value) -> Result<Value, String>
     if action == "storage_usage" {
         return Ok(storage::usage(root));
     }
-    if matches!(
-        crate::game::status()["phase"].as_str(),
-        Some("preparing" | "running")
-    ) {
+    if crate::game::busy() {
         return Err("Cierra Minecraft antes de limpiar archivos.".into());
     }
     storage::clear(root, request["kind"].as_str().unwrap_or_default())

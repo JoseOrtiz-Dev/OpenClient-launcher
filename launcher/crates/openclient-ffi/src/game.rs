@@ -7,29 +7,124 @@ use openclient_core::{
     CancelToken, GameContext,
 };
 use serde_json::{json, Value};
-use std::{path::Path, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{LazyLock, Mutex},
+};
 
-static STATE: Mutex<Option<Value>> = Mutex::new(None);
-/// Token del lanzamiento en fase `preparing`; se limpia en `game-started`, al salir o en error.
-static GAME_CANCEL: Mutex<Option<CancelToken>> = Mutex::new(None);
+#[derive(Default)]
+struct Games {
+    states: HashMap<String, Value>,
+    preparing: Option<(String, CancelToken)>,
+    last_id: String,
+}
 
-/// Cancela el lanzamiento solo mientras prepara (descargas); nunca con el proceso ya lanzado.
-pub fn cancel_launch() -> bool {
-    let state = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !state.as_ref().is_some_and(|s| s["phase"] == "preparing") {
-        return false;
+impl Games {
+    fn busy(&self) -> bool {
+        self.preparing.is_some() || self.states.values().any(|state| state["phase"] == "running")
     }
-    match GAME_CANCEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).as_ref() {
-        Some(token) => {
-            token.cancel();
-            true
+
+    fn begin(&mut self, id: &str) -> Result<CancelToken, String> {
+        if self.preparing.is_some() {
+            return Err("Ya hay un lanzamiento activo.".into());
         }
-        None => false,
+        if self.states.get(id).is_some_and(|state| state["phase"] == "running") {
+            return Err("Esta instancia ya está en juego.".into());
+        }
+        let cancel = CancelToken::default();
+        self.preparing = Some((id.to_owned(), cancel.clone()));
+        self.last_id = id.to_owned();
+        self.states.insert(id.to_owned(), json!({
+            "phase": "preparing", "message": "Preparando Minecraft…", "instanceId": id,
+        }));
+        Ok(cancel)
+    }
+
+    fn status(&mut self, request: &Value) -> Value {
+        let id = request["id"].as_str().unwrap_or(&self.last_id);
+        let Some(state) = self.states.get(id) else {
+            return json!({"phase": "idle"});
+        };
+        if request["consume"].as_bool() == Some(true) && state["phase"] == "idle" {
+            return self.states.remove(id).unwrap();
+        }
+        state.clone()
+    }
+
+    fn cancel_preparation(&self) -> bool {
+        let Some((id, token)) = &self.preparing else {
+            return false;
+        };
+        if !self.states.get(id).is_some_and(|state| state["phase"] == "preparing") {
+            return false;
+        }
+        token.cancel();
+        true
+    }
+
+    fn end_preparation(&mut self, id: &str, error: Option<&str>) {
+        self.preparing = None;
+        if let Some(error) = error {
+            let message = if error.starts_with("CANCELLED:") { "Lanzamiento cancelado." } else { error };
+            self.states.insert(id.to_owned(), json!({"phase":"idle", "message":message, "instanceId": id}));
+        }
+    }
+
+    fn record_event(&mut self, root: &Path, id: &str, event: &str, data: Value) {
+        let Some(state) = self.states.get_mut(id) else {
+            return;
+        };
+        match event {
+            "game-started" => {
+                *state = json!({"phase":"running", "message":"Minecraft iniciado.", "instanceId": id});
+            }
+            "game-exited" => {
+                record_playtime(root, id, data["elapsed_seconds"].as_u64().unwrap_or(0));
+                let code = data["exit_code"].as_i64();
+                let message = match code {
+                    Some(0) => "Minecraft se cerró.".to_owned(),
+                    Some(code) => format!("Minecraft terminó con código {code}. Consulta el registro."),
+                    None => "Minecraft terminó. Consulta el registro.".to_owned(),
+                };
+                *state = json!({"phase":"idle", "message":message, "exitCode":code, "instanceId":id});
+            }
+            "launch-progress" | "java-progress" if state["phase"] == "preparing" => {
+                *state = json!({
+                    "phase":"preparing", "message":data["message"], "percent":data["percent"], "instanceId":id,
+                });
+            }
+            _ => {}
+        }
     }
 }
 
-fn clear_cancel() {
-    *GAME_CANCEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+static GAMES: LazyLock<Mutex<Games>> = LazyLock::new(|| Mutex::new(Games::default()));
+
+fn record_playtime(root: &Path, id: &str, seconds: u64) {
+    let path = root.join("launcher_state.json");
+    let Ok(Some(raw)) = load_state_at(&path) else {
+        return;
+    };
+    let Ok(mut library) = serde_json::from_str::<Value>(&raw) else {
+        return;
+    };
+    let Some(entry) = library["instances"]
+        .as_array_mut()
+        .and_then(|instances| instances.iter_mut().find(|instance| instance["id"] == id))
+    else {
+        return;
+    };
+    let previous = entry["playtimeHours"].as_f64().unwrap_or(0.0);
+    let added = (seconds as f64 / 3600.0).max(0.1);
+    entry["playtimeHours"] = json!(((previous + added) * 10.0).round() / 10.0);
+    entry["lastPlayed"] = json!("Reciente");
+    let _ = write_state_locked(&path, &library.to_string());
+}
+
+/// Cancela el lanzamiento solo mientras prepara (descargas); nunca con el proceso ya lanzado.
+pub fn cancel_launch() -> bool {
+    GAMES.lock().unwrap().cancel_preparation()
 }
 
 /// Revierte una actualización de modpack interrumpida antes de lanzar (barato: solo mira
@@ -38,12 +133,12 @@ fn recover_pending(root: &Path, id: &str) -> Result<(), String> {
     openclient_core::modpack_tx::recover(root, id).map(|_| ())
 }
 
-pub fn status() -> Value {
-    STATE
-        .lock()
-        .unwrap()
-        .clone()
-        .unwrap_or_else(|| json!({"phase": "idle"}))
+pub fn status(request: &Value) -> Value {
+    GAMES.lock().unwrap().status(request)
+}
+
+pub fn busy() -> bool {
+    GAMES.lock().unwrap().busy()
 }
 
 pub(crate) fn selection(request: &Value) -> Result<(&Path, Value), String> {
@@ -136,7 +231,6 @@ pub fn sync_content_with(request: &Value, context: &GameContext) -> Result<Value
 
 pub fn launch(request: &Value) -> Result<Value, String> {
     let (root, instance) = selection(request)?;
-    recover_pending(root, instance["id"].as_str().unwrap())?;
     let microsoft = request["accountType"] == "microsoft";
     let session = if microsoft {
         crate::account::session_path(
@@ -235,78 +329,22 @@ pub fn launch(request: &Value) -> Result<Value, String> {
         .enable_all()
         .build()
         .map_err(|error| format!("No se pudo iniciar el motor: {error}"))?;
-    {
-        let mut state = STATE.lock().unwrap();
-        if state
-            .as_ref()
-            .is_some_and(|s| matches!(s["phase"].as_str(), Some("preparing" | "running")))
-        {
-            return Err("Ya hay un lanzamiento activo.".into());
-        }
-        *state = Some(json!({"phase": "preparing", "message": "Preparando Minecraft…"}));
-    }
-    let cancel = CancelToken::default();
-    *GAME_CANCEL.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(cancel.clone());
+    let id = launch.instance_id.clone();
+    let cancel = GAMES.lock().unwrap().begin(&id)?;
+    let event_id = id.clone();
     let root_for_exit = root.to_owned();
     let app = GameContext::new(root.to_owned(), "0.1.0-preview.25", move |event, data| {
-        let mut state = STATE.lock().unwrap();
-        match event {
-            "game-started" => {
-                clear_cancel();
-                *state = Some(json!({"phase":"running", "message":"Minecraft iniciado."}))
-            }
-            "game-exited" => {
-                if let Some(id) = data["instance_id"].as_str() {
-                    let secs = data["elapsed_seconds"].as_u64().unwrap_or(0);
-                    let path = root_for_exit.join("launcher_state.json");
-                    if let Ok(Some(raw)) = load_state_at(&path) {
-                        if let Ok(mut lib) = serde_json::from_str::<Value>(&raw) {
-                            if let Some(entry) = lib["instances"]
-                                .as_array_mut()
-                                .and_then(|arr| arr.iter_mut().find(|i| i["id"].as_str() == Some(id)))
-                            {
-                                let prev = entry["playtimeHours"].as_f64().unwrap_or(0.0);
-                                let added = (secs as f64 / 3600.0).max(0.1);
-                                entry["playtimeHours"] = json!(((prev + added) * 10.0).round() / 10.0);
-                                entry["lastPlayed"] = json!("Reciente");
-                                let _ = write_state_locked(&path, &lib.to_string());
-                            }
-                        }
-                    }
-                }
-                let code = data["exit_code"].as_i64();
-                let message = match code {
-                    Some(0) => "Minecraft se cerró.".to_owned(),
-                    Some(code) => {
-                        format!("Minecraft terminó con código {code}. Consulta el registro.")
-                    }
-                    None => "Minecraft terminó. Consulta el registro.".to_owned(),
-                };
-                *state = Some(json!({"phase":"idle", "message":message, "exitCode": code, "instanceId": data["instance_id"]}));
-            }
-            "launch-progress" | "java-progress"
-                if state.as_ref().is_some_and(|s| s["phase"] == "preparing") =>
-            {
-                *state = Some(
-                    json!({"phase":"preparing", "message":data["message"], "percent":data["percent"]}),
-                );
-            }
-            _ => {}
-        }
+        GAMES.lock().unwrap().record_event(&root_for_exit, &event_id, event, data);
         Ok(())
     })
     .with_cancel(cancel);
-    match runtime.block_on(game_launcher::launch_game(app, launch, |id| async move {
-        openclient_core::microsoft::ensure_microsoft_session(&session, &id, false).await
-    })) {
-        Ok(result) => Ok(json!({"pid":result.pid, "warnings":result.warnings})),
-        Err(error) => {
-            clear_cancel();
-            let message = if error.starts_with("CANCELLED:") { "Lanzamiento cancelado." } else { error.as_str() };
-            *STATE.lock().unwrap() = Some(json!({"phase":"idle", "message":message}));
-            Err(error)
-        }
-    }
+    let result = recover_pending(root, &id).and_then(|()| {
+        runtime.block_on(game_launcher::launch_game(app, launch, |id| async move {
+            openclient_core::microsoft::ensure_microsoft_session(&session, &id, false).await
+        }))
+    });
+    GAMES.lock().unwrap().end_preparation(&id, result.as_ref().err().map(String::as_str));
+    result.map(|result| json!({"pid":result.pid, "warnings":result.warnings}))
 }
 
 /// Versión fijada del cargador: `fabricVersion`, o la del modpack si declara el mismo cargador.
@@ -343,4 +381,47 @@ fn catalog_mods(instance: &Value) -> Vec<game_launcher::LaunchMod> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn two_games_keep_their_own_status_and_playtime() {
+        let root = std::env::temp_dir().join(format!("openclient-games-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let library = root.join("launcher_state.json");
+        std::fs::write(&library, r#"{"instances":[{"id":"first"},{"id":"second"}]}"#).unwrap();
+        let mut games = Games::default();
+
+        games.begin("first").unwrap();
+        assert!(games.begin("second").is_err());
+        games.record_event(&root, "first", "game-started", Value::Null);
+        games.end_preparation("first", None);
+        assert!(games.begin("first").is_err());
+
+        let second = games.begin("second").unwrap();
+        assert!(games.cancel_preparation());
+        assert!(second.is_cancelled());
+        games.end_preparation("second", Some("CANCELLED: test"));
+        assert_eq!(games.status(&json!({"id":"first"}))["phase"], "running");
+
+        games.begin("second").unwrap();
+        games.record_event(&root, "second", "game-started", Value::Null);
+        games.end_preparation("second", None);
+        games.record_event(&root, "first", "game-exited", json!({"exit_code":0,"elapsed_seconds":3600}));
+        let finished = games.status(&json!({"id":"first","consume":true}));
+        assert_eq!(finished["exitCode"], 0);
+        assert_eq!(games.status(&json!({"id":"second"}))["phase"], "running");
+        assert!(games.busy());
+
+        games.record_event(&root, "second", "game-exited", json!({"exit_code":7,"elapsed_seconds":7200}));
+        assert_eq!(games.status(&json!({"id":"second","consume":true}))["exitCode"], 7);
+        assert!(!games.busy());
+        let stored: Value = serde_json::from_str(&load_state_at(&library).unwrap().unwrap()).unwrap();
+        assert_eq!(stored["instances"][0]["playtimeHours"], 1.0);
+        assert_eq!(stored["instances"][1]["playtimeHours"], 2.0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

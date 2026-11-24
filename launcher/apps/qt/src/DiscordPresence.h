@@ -75,5 +75,5 @@ private:
     bool m_showServer = true;
     bool m_connecting = false;
     bool m_ready = false;
-    bool m_running = false;
+    QString m_playingInstanceId;
 };

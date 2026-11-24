@@ -93,6 +93,8 @@ class LauncherController final : public QObject {
     Q_PROPERTY(int gamePercent READ gamePercent NOTIFY gameChanged)
     Q_PROPERTY(bool gameRunning READ gameRunning NOTIFY gameChanged)
     Q_PROPERTY(QString playingInstanceId READ playingInstanceId NOTIFY gameChanged)
+    Q_PROPERTY(QString preparingInstanceId READ preparingInstanceId NOTIFY gameChanged)
+    Q_PROPERTY(QStringList runningInstanceIds READ runningInstanceIds NOTIFY gameChanged)
     Q_PROPERTY(bool catalogBusy READ catalogBusy NOTIFY catalogChanged)
     Q_PROPERTY(bool projectBusy READ projectBusy NOTIFY projectChanged)
     Q_PROPERTY(QVariantMap projectInfo READ projectInfo NOTIFY projectChanged)
@@ -224,10 +226,12 @@ public:
     QString microsoftCode() const { return m_microsoftPrompt.value("user_code").toString(); }
     QString accountError() const { return m_accountError; }
     bool gameBusy() const { return static_cast<bool>(m_gameLock); }
-    QString gameMessage() const { return m_gameMessage; }
-    int gamePercent() const { return m_gamePercent; }
-    QString playingInstanceId() const { return gameBusy() ? m_playingId : QString(); }
-    bool gameRunning() const { return gameBusy() && m_gameWasRunning; }
+    QString gameMessage() const { return m_preparingId.isEmpty() ? m_gameMessage : m_launchMessage; }
+    int gamePercent() const { return m_preparingId.isEmpty() && gameRunning() ? 100 : m_gamePercent; }
+    QString playingInstanceId() const { return gameRunning() ? m_runningIds.constLast() : m_preparingId; }
+    QString preparingInstanceId() const { return m_preparingId; }
+    QStringList runningInstanceIds() const { return m_runningIds; }
+    bool gameRunning() const { return !m_runningIds.isEmpty(); }
     QString linkUrl(int id) const;
     bool catalogBusy() const { return m_catalogPending; }
     bool projectBusy() const { return m_projectPending; }
@@ -312,6 +316,8 @@ public:
     Q_INVOKABLE void releaseContent();
     Q_INVOKABLE bool setInstanceRam(const QString &id, int ramMb);
     Q_INVOKABLE void playInstance(const QString &id);
+    Q_INVOKABLE void requestPlayInstance(const QString &id);
+    Q_INVOKABLE void playInstanceWithAccount(const QString &id, const QString &kind, const QString &key);
     Q_INVOKABLE QString instanceLog(const QString &id);
     Q_INVOKABLE void analyzeCrash(const QString &id);
     Q_INVOKABLE bool setOfflineAccount(const QString &username);
@@ -378,6 +384,7 @@ signals:
     void storageChanged();
     void versionsChanged();
     void gameCrashed(const QString &instanceId, int exitCode);
+    void launchAccountRequested(const QString &instanceId);
     void crashFindingsChanged();
     void hardwareChanged();
     void linkErrorChanged();
@@ -424,6 +431,8 @@ private:
     bool selectMicrosoft(bool value);
     void reloadMicrosoftAccounts();
     void pollGame();
+    void launchInstance(const QString &id, const QVariantMap &account);
+    void releaseGameLockIfIdle();
     void startCatalogRequest(QVariantMap request, bool writesLibrary);
     void startFileOperation(const QVariantMap &request, const QString &message);
     void startModpackWrite(QVariantMap request);
@@ -545,10 +554,12 @@ private:
     QTimer m_gameTimer;
     std::unique_ptr<QLockFile> m_gameLock;
     QString m_gameMessage;
-    QString m_playingId;
+    QString m_launchMessage;
+    QString m_preparingId;
+    QString m_launchAccountId;
+    QStringList m_runningIds;
     int m_gamePercent = 0;
     bool m_launchPending = false;
-    bool m_gameWasRunning = false;
     bool m_minimizeOnLaunch = false;
     bool m_refocusOnExit = false;
     QString m_gcPreset = "automatic";

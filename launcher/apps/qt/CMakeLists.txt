@@ -78,6 +78,7 @@ qt_add_qml_module(openclient-qt
 
 # Traducciones: el español está en el código; cada idioma nuevo es un .ts en translations/.
 qt_add_translations(openclient-qt
+    SOURCE_TARGETS openclient-qt
     TS_FILES translations/openclient_en.ts
     RESOURCE_PREFIX "/i18n"
     LUPDATE_OPTIONS -no-obsolete)

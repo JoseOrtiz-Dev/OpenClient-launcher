@@ -23,9 +23,12 @@ operaciones de biblioteca y adquiere un bloqueo para cada lectura o escritura.
 Las operaciones admitidas son listar, crear, editar y retirar instancias, además
 de validar un perfil local. La respuesta devuelve `result` o `error`.
 La consulta de hardware se ejecuta en un trabajador de QtConcurrent.
-El inicio del juego también se ejecuta en un trabajador. El controlador consulta
-`game_status` y mantiene el bloqueo de la biblioteca hasta el cierre de Java.
-La DLL permanece cargada porque el motor espera el cierre en un hilo de Rust.
+El inicio del juego también se ejecuta en un trabajador. Se prepara una instancia a
+la vez y cada proceso Java tiene su propio estado. El controlador consulta
+`game_status` con el `id` de la instancia y usa `consume` para retirar un estado
+final ya leído. Mantiene el bloqueo de la biblioteca hasta que termine la última
+partida. La DLL permanece cargada porque Rust espera el cierre de cada proceso
+en su propio hilo.
 
 El lockfile del puente se versiona porque genera un binario distribuible. Cambios
 incompatibles requieren subir la versión de ABI y adaptar los consumidores.
