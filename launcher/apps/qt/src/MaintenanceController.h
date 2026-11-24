@@ -11,8 +11,7 @@
 class LauncherController;
 class QNetworkReply;
 
-// Carpeta de datos, informe de errores y comprobación manual de actualizaciones.
-// Nada de esto se ejecuta solo: cada operación la inicia el usuario.
+// Carpeta de datos, informe de errores y actualizaciones (al arrancar si está activado, o con el botón).
 class MaintenanceController final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString dataDirectory READ dataDirectory CONSTANT)
@@ -32,6 +31,11 @@ class MaintenanceController final : public QObject {
     Q_PROPERTY(bool updateInstallable READ updateInstallable NOTIFY updateChanged)
     Q_PROPERTY(bool updateDownloading READ updateDownloading NOTIFY updateChanged)
     Q_PROPERTY(int updatePercent READ updatePercent NOTIFY updateChanged)
+    Q_PROPERTY(bool autoUpdate READ autoUpdate WRITE setAutoUpdate NOTIFY updateChanged)
+    // "" sin actividad, "downloading", "installing" o "failed".
+    Q_PROPERTY(QString updateStage READ updateStage NOTIFY updateChanged)
+    Q_PROPERTY(QString updateVersion READ updateVersion NOTIFY updateChanged)
+    Q_PROPERTY(double updateSizeMb READ updateSizeMb NOTIFY updateChanged)
     Q_PROPERTY(QString currentVersion READ currentVersion CONSTANT)
     Q_PROPERTY(bool portable READ portable CONSTANT)
 
@@ -52,6 +56,9 @@ public:
     static QString redact(const QString &text, const QString &home);
     static int compareVersions(const QString &left, const QString &right);
     static QVariantMap parseManifest(const QByteArray &raw, const QString &channel, const QString &current);
+    // Carpeta de una instalación hecha con el instalador (la que contiene bin/ y el desinstalador), o vacío.
+    static QString installRoot(const QString &appDirectory);
+    static QStringList updateArguments(qint64 pid, const QString &installDirectory);
     QString buildReport() const;
 
     QString dataDirectory() const { return m_dataDirectory; }
@@ -73,8 +80,13 @@ public:
     bool updateInstallable() const { return !m_updateUrl.isEmpty() && !m_updateSha256.isEmpty() && m_updateSize > 0; }
     bool updateDownloading() const { return m_updateReply != nullptr; }
     int updatePercent() const { return m_updatePercent; }
+    bool autoUpdate() const { return m_autoUpdate; }
+    QString updateStage() const { return m_stage; }
+    QString updateVersion() const { return m_updateVersion; }
+    double updateSizeMb() const { return m_updateSize / (1024.0 * 1024.0); }
     QString currentVersion() const;
     void setUpdateChannel(const QString &value);
+    void setAutoUpdate(bool value);
 
     Q_INVOKABLE void moveDataDirectory(const QUrl &folder);
     Q_INVOKABLE void useDefaultDirectory();
@@ -84,6 +96,9 @@ public:
     Q_INVOKABLE void openUpdate();
     Q_INVOKABLE void installUpdate();
     Q_INVOKABLE void cancelUpdateDownload();
+    // Al arrancar: busca y, si hay versión nueva verificable, la descarga e instala sin preguntar.
+    Q_INVOKABLE void autoCheck();
+    Q_INVOKABLE void dismissUpdate();
 
 signals:
     void locationChanged();
@@ -115,5 +130,9 @@ private:
     qint64 m_updateSize = 0;
     QNetworkReply *m_updateReply = nullptr;
     int m_updatePercent = -1;
+    bool m_autoUpdate = true;
+    bool m_autoRun = false;
+    QString m_stage;
+    QString m_updateVersion;
     QNetworkAccessManager m_network;
 };

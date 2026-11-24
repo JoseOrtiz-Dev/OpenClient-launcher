@@ -21,6 +21,7 @@
 #include <QTemporaryFile>
 #include <QtConcurrent>
 #include <algorithm>
+#include <utility>
 
 namespace {
 constexpr qint64 manifestLimit = 64 * 1024;
@@ -91,6 +92,7 @@ MaintenanceController::MaintenanceController(LauncherController *launcher, const
       m_bootstrapFile(bootstrapFile), m_manifestUrl(manifestUrl), m_dataDirectory(dataDirectory) {
     const auto saved = m_settings.value("updates/channel", "stable").toString();
     if (saved == "stable" || saved == "beta") m_channel = saved;
+    m_autoUpdate = m_settings.value("updates/auto", true).toBool();
     const auto chosen = QSettings(m_bootstrapFile, QSettings::IniFormat).value("location/data_directory").toString();
     if (!chosen.isEmpty() && normalized(chosen) != normalized(m_dataDirectory)) {
         m_locationMessage = QString("No se encontró la carpeta elegida (%1). Se usa la predeterminada.").arg(QDir::toNativeSeparators(chosen));
@@ -379,7 +381,39 @@ void MaintenanceController::setUpdateChannel(const QString &value) {
     m_updateUrl.clear();
     m_updateSha256.clear();
     m_updateSize = 0;
+    m_updateVersion.clear();
     m_updateMessage.clear();
+    emit updateChanged();
+}
+
+void MaintenanceController::setAutoUpdate(bool value) {
+    if (value == m_autoUpdate) return;
+    m_autoUpdate = value;
+    m_settings.setValue("updates/auto", m_autoUpdate);
+    m_settings.sync();
+    emit updateChanged();
+}
+
+QString MaintenanceController::installRoot(const QString &appDirectory) {
+    QDir root(appDirectory);
+    if (!root.cdUp() || !QFileInfo(root.filePath("Desinstalar-OpenClient.exe")).isFile()) return {};
+    return QDir::cleanPath(root.absolutePath());
+}
+
+QStringList MaintenanceController::updateArguments(qint64 pid, const QString &installDirectory) {
+    return {"--silent", QString("--update=%1").arg(pid), "--dir=" + QDir::toNativeSeparators(installDirectory)};
+}
+
+// Una instalación portable guarda los datos dentro de su carpeta: reemplazarla en silencio los movería, así que ahí no.
+void MaintenanceController::autoCheck() {
+    if (!m_autoUpdate || portable() || !updatesConfigured() || m_checking || m_updateReply) return;
+    m_autoRun = true;
+    checkForUpdates();
+}
+
+void MaintenanceController::dismissUpdate() {
+    if (m_stage != "failed") return;
+    m_stage.clear();
     emit updateChanged();
 }
 
@@ -389,7 +423,9 @@ void MaintenanceController::checkForUpdates() {
     m_updateUrl.clear();
     m_updateSha256.clear();
     m_updateSize = 0;
+    m_updateVersion.clear();
     if (!updatesConfigured() || manifest.scheme() != "https") {
+        m_autoRun = false;
         m_updateMessage = "Esta compilación no tiene un canal de actualizaciones configurado.";
         emit updateChanged();
         return;
@@ -407,6 +443,7 @@ void MaintenanceController::checkForUpdates() {
     connect(reply, &QNetworkReply::finished, this, [this, reply, manifest] {
         reply->deleteLater();
         m_checking = false;
+        const bool autoRun = std::exchange(m_autoRun, false);
         const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (reply->error() != QNetworkReply::NoError || status != 200) {
             m_updateMessage = "No se pudo consultar las actualizaciones. Revisa tu conexión.";
@@ -424,13 +461,15 @@ void MaintenanceController::checkForUpdates() {
                     m_updateUrl = download.toString();
                     m_updateSha256 = result.value("sha256").toString();
                     m_updateSize = result.value("size").toLongLong();
-                    m_updateMessage = QString("Hay una versión nueva: %1.").arg(result.value("version").toString());
+                    m_updateVersion = result.value("version").toString();
+                    m_updateMessage = QString("Hay una versión nueva: %1.").arg(m_updateVersion);
                 } else {
                     m_updateMessage = "La descarga indicada no está en un sitio de confianza; no se ofrece.";
                 }
             }
         }
         emit updateChanged();
+        if (autoRun && updateInstallable()) installUpdate();
     });
 }
 
@@ -440,7 +479,8 @@ void MaintenanceController::openUpdate() {
 }
 
 // Descarga el instalador nuevo, comprueba tamaño y SHA-256 del manifiesto y solo entonces lo abre.
-// Lo inicia el usuario con un botón; el instalador se abre con su asistente normal y el launcher se cierra.
+// En una instalación normal el instalador espera a que el launcher se cierre, reemplaza la carpeta en silencio
+// y vuelve a abrirlo; en una copia suelta o portable se abre su asistente.
 void MaintenanceController::installUpdate() {
     if (m_updateReply || m_checking || !updateInstallable()) return;
     if (m_launcher && m_launcher->gameBusy()) {
@@ -471,6 +511,7 @@ void MaintenanceController::installUpdate() {
     auto written = std::make_shared<qint64>(0);
     auto oversize = std::make_shared<bool>(false);
     m_updatePercent = 0;
+    m_stage = "downloading";
     m_updateMessage = "Descargando la actualización… 0 %";
     auto *reply = m_network.get(request);
     m_updateReply = reply;
@@ -513,23 +554,29 @@ void MaintenanceController::installUpdate() {
         else if (!QFile::rename(partPath, target)) failure = "No se pudo guardar el instalador.";
         if (!failure.isEmpty()) {
             QFile::remove(partPath);
+            m_stage = cancelled ? QString() : QString("failed");
             m_updateMessage = failure;
             emit updateChanged();
             return;
         }
         if (m_launcher && m_launcher->gameBusy()) {
+            m_stage = "failed";
             m_updateMessage = "Descarga verificada, pero Minecraft sigue abierto. Ciérralo y vuelve a pulsar Actualizar.";
             emit updateChanged();
             return;
         }
-        if (!QProcess::startDetached(target, {})) {
+        const auto root = portable() ? QString() : installRoot(QCoreApplication::applicationDirPath());
+        const auto arguments = root.isEmpty() ? QStringList() : updateArguments(QCoreApplication::applicationPid(), root);
+        if (!QProcess::startDetached(target, arguments)) {
+            m_stage = "failed";
             m_updateMessage = "La descarga se verificó, pero no se pudo abrir el instalador.";
             emit updateChanged();
             return;
         }
-        m_updateMessage = "Abriendo el instalador…";
+        m_stage = "installing";
+        m_updateMessage = root.isEmpty() ? "Abriendo el instalador…" : "Instalando… OpenClient se abrirá solo en unos segundos.";
         emit updateChanged();
-        QTimer::singleShot(400, qApp, &QCoreApplication::quit);
+        QTimer::singleShot(root.isEmpty() ? 400 : 900, qApp, &QCoreApplication::quit);
     });
 }
 

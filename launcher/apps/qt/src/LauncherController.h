@@ -434,6 +434,7 @@ private:
     void beginOperation(const QString &kind);
     void endOperation(bool cancelled);
     bool applyInstances(const QVariant &result);
+    QVariantList withDiskMods(QVariantList list) const;
     void startOfficialUpdate(const QString &id);
     QString modpackWriteMessage(const QString &action, const QVariantMap &result);
     void persist();

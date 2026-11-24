@@ -187,7 +187,7 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 currentPage: window.activePage
                 settingsOpen: window.settingsShown
-                hold: startupIntro.playing
+                hold: startupIntro.playing && !startupIntro.revealing
                 destinations: window.destinations
                 onNavigate: page => {
                     if (page === "settings") window.settingsShown = true
@@ -662,7 +662,15 @@ ApplicationWindow {
         id: startupIntro
         z: 100
         anchors.fill: parent
-        onFinished: Qt.callLater(window.showIntroduction)
+        onFinished: {
+            Qt.callLater(window.showIntroduction)
+            maintenance.autoCheck()
+        }
+    }
+    UpdateDialog {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(440, window.width - 48)
     }
     WelcomeDialog {
         id: welcomeDialog

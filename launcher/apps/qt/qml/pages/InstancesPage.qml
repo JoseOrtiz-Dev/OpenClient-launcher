@@ -412,8 +412,11 @@ ColumnLayout {
                     clip: true
                     readonly property string loaderId: modelData.category || "vanilla"
                     readonly property color loaderColor: root.loaderColorFor(loaderId)
-                    readonly property int totalMods: (modelData.installedContent || []).length
-                    readonly property int activeMods: (modelData.installedContent || []).filter(item => item.enabled !== false).length
+                    // Los mods se cuentan en disco: los de un modpack no están en installedContent.
+                    readonly property int totalMods: modelData.diskMods !== undefined ? modelData.diskMods
+                        : (modelData.installedContent || []).filter(item => (item.type || "mod") === "mod").length
+                    readonly property int activeMods: modelData.diskModsActive !== undefined ? modelData.diskModsActive
+                        : (modelData.installedContent || []).filter(item => (item.type || "mod") === "mod" && item.enabled !== false).length
                     readonly property string playtimeText: (modelData.playtimeHours || 0) > 0 ? qsTr("%1 h").arg(modelData.playtimeHours) : qsTr("0 h")
                     border.color: Theme.crystal ? (cardHover.containsMouse ? Theme.glassBorderHover : "transparent")
                         : cardHover.containsMouse ? Theme.highlight : Theme.rim

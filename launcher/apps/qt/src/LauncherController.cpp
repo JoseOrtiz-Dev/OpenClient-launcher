@@ -162,7 +162,7 @@ LauncherController::LauncherController(const QString &settingsFile, QObject *par
                     }
                     if (action == "modpack_update") requestModpackCheck(id, false);
                 } else {
-                    m_instances = result.toList();
+                    m_instances = withDiskMods(result.toList());
                     m_libraryError.clear();
                     m_copyMessage = action == "duplicate" ? "Copia creada en la biblioteca." :
                         action == "modpack_import" ? "Modpack importado como una instancia nueva." :
@@ -902,7 +902,7 @@ bool LauncherController::updateLibrary(QVariantMap request) {
     }
     request.insert("root", m_libraryRoot);
     const auto result = requestEngine(request, m_libraryError);
-    if (m_libraryError.isEmpty()) m_instances = result.toList();
+    if (m_libraryError.isEmpty()) m_instances = withDiskMods(result.toList());
     emit libraryChanged();
     return m_libraryError.isEmpty();
 }
@@ -1875,10 +1875,27 @@ bool LauncherController::applyInstances(const QVariant &result) {
     } else {
         return false;
     }
-    m_instances = list;
+    m_instances = withDiskMods(list);
     m_libraryError.clear();
     emit libraryChanged();
     return true;
+}
+
+// Mods que hay de verdad en `instances/<id>/mods` (activos y `.disabled`). Un modpack los instala ahí sin
+// añadirlos a installedContent, así que sin esto su tarjeta diría «Sin mods».
+QVariantList LauncherController::withDiskMods(QVariantList list) const {
+    for (auto &item : list) {
+        auto entry = item.toMap();
+        const auto id = entry.value("id").toString();
+        if (QUuid::fromString(id).isNull()) continue;
+        const QDir mods(QDir(m_libraryRoot).filePath("instances/" + id + "/mods"));
+        const auto files = mods.entryList({"*.jar", "*.jar.disabled"}, QDir::Files);
+        entry.insert("diskMods", files.size());
+        entry.insert("diskModsActive", std::count_if(files.cbegin(), files.cend(),
+            [](const QString &name) { return name.endsWith(".jar", Qt::CaseInsensitive); }));
+        item = entry;
+    }
+    return list;
 }
 
 QString LauncherController::modpackWriteMessage(const QString &action, const QVariantMap &r) {

@@ -877,6 +877,17 @@ ColumnLayout {
                         }
                         RowLayout {
                             Layout.fillWidth: true
+                            visible: maintenance.updatesConfigured && !maintenance.portable
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Label { text: qsTr("Actualizar automáticamente"); color: Theme.ink }
+                                Label { text: qsTr("Al abrir OpenClient, si hay una versión nueva se descarga e instala sola y el launcher se reinicia."); color: Theme.dim; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            }
+                            GlassSwitch { checked: maintenance.autoUpdate; onToggled: maintenance.autoUpdate = checked; Accessible.name: "Actualizar automáticamente" }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
                             spacing: 8
                             ActionButton { text: qsTr("Buscar actualizaciones"); enabled: !maintenance.updateChecking && !maintenance.updateDownloading; onClicked: maintenance.checkForUpdates() }
                             ActionButton { text: qsTr("Descargar e instalar"); primary: true; visible: maintenance.updateInstallable; enabled: !maintenance.updateDownloading; onClicked: maintenance.installUpdate() }
@@ -892,7 +903,7 @@ ColumnLayout {
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
-                        Label { text: qsTr("OpenClient solo busca, descarga e instala actualizaciones cuando pulsas un botón, y comprueba la huella SHA-256 del instalador antes de abrirlo."); color: Theme.dim; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                        Label { text: qsTr("Antes de instalar, OpenClient comprueba la huella SHA-256 del instalador publicado."); color: Theme.dim; font.pixelSize: 11; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                         Label {
                             objectName: "settingsCurseforgeStatus"
                             text: qsTr("CurseForge · Próximamente")

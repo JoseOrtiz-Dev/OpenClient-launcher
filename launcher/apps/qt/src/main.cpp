@@ -310,6 +310,23 @@ int main(int argc, char *argv[]) {
                 const auto portableData = M::portableDirectory(app.path());
                 if (portableData != QDir::cleanPath(QFileInfo(app.path() + "/data").canonicalFilePath()) || !QFileInfo(portableData).isDir()) return 34;
             }
+            // Auto-actualización: solo se reemplaza una instalación hecha con el instalador, y el instalador recibe
+            // el proceso que debe esperar y la carpeta exacta.
+            {
+                QTemporaryDir install;
+                if (!install.isValid() || !QDir().mkpath(install.path() + "/bin")) return 41;
+                if (!M::installRoot(install.path() + "/bin").isEmpty()) return 41;
+                { QFile f(install.path() + "/Desinstalar-OpenClient.exe"); if (!f.open(QIODevice::WriteOnly)) return 41; }
+                if (M::installRoot(install.path() + "/bin") != QDir::cleanPath(install.path())) return 41;
+                const auto args = M::updateArguments(4321, "C:/Programas/OpenClient");
+                if (args != QStringList{"--silent", "--update=4321", "--dir=C:\\Programas\\OpenClient"}) return 41;
+                if (!maintenance.autoUpdate() || !maintenance.updateStage().isEmpty()) return 41;
+                maintenance.setAutoUpdate(false);
+                if (maintenance.autoUpdate() || QSettings(QDir(data).filePath("maintenance.ini"), QSettings::IniFormat).value("updates/auto").toBool()) return 41;
+                maintenance.autoCheck();
+                if (maintenance.updateChecking()) return 41;
+                maintenance.setAutoUpdate(true);
+            }
             const auto report = maintenance.buildReport();
             if (!report.contains("Versión:") || !report.contains("RAM global:") || report.contains("fixture-legacy-secret")) return 30;
             maintenance.checkForUpdates();
@@ -437,6 +454,20 @@ int main(int argc, char *argv[]) {
         if (!launcher.instances().isEmpty() ||
             !launcher.saveInstance({}, "Prueba", "1.21.4", "fabric")) return 7;
         const auto id = launcher.instances().first().toMap().value("id").toString();
+        {   // Un modpack deja sus mods en disco sin pasar por installedContent: la tarjeta debe contarlos igual.
+            const QString mods = QDir(data).filePath("instances/" + id + "/mods");
+            QDir().mkpath(mods);
+            for (const auto *name : {"a.jar", "b.JAR", "c.jar.disabled", "leeme.txt"}) {
+                QFile file(mods + "/" + name);
+                if (!file.open(QIODevice::WriteOnly)) return 40;
+            }
+            const auto item = launcher.reloadLibrary() ? launcher.instances().first().toMap() : QVariantMap{};
+            QDir(mods).removeRecursively();
+            if (item.value("diskMods").toInt() != 3 || item.value("diskModsActive").toInt() != 2) {
+                std::fprintf(stderr, "Mods en disco: %d/%d\n", item.value("diskModsActive").toInt(), item.value("diskMods").toInt());
+                return 40;
+            }
+        }
         if (!launcher.saveInstance(id, "Prueba Forge", "1.20.1", "forge") ||
             launcher.instances().first().toMap().value("loaderLabel").toString() != "Forge" ||
             !launcher.saveInstance(id, "Prueba NeoForge", "1.21.4", "neoforge") ||

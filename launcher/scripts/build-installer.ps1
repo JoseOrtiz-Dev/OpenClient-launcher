@@ -103,11 +103,14 @@ namespace OpenClientSetup {
             string target = InstallerEngine.DefaultDirectory;
             bool silent = false;
             bool portable = false;
+            int waitFor = 0;
             foreach (string arg in args) {
                 if (arg == "--silent" || arg == "/S") silent = true;
                 else if (arg == "--portable") portable = true;
                 else if (arg.StartsWith("--dir=", StringComparison.Ordinal)) target = arg.Substring(6);
+                else if (arg.StartsWith("--update=", StringComparison.Ordinal)) int.TryParse(arg.Substring(9), out waitFor);
             }
+            if (silent && waitFor > 0) return Update(target, waitFor);
             if (silent) {
                 try {
                     InstallerEngine.Install(target, false, false, !portable, null);
@@ -121,6 +124,31 @@ namespace OpenClientSetup {
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new SetupForm());
             return 0;
+        }
+
+        // Auto-actualización desde el launcher: espera a que se cierre, reemplaza la instalación y lo vuelve a abrir.
+        // Si algo falla, la instalación anterior queda intacta y se abre igual.
+        private static int Update(string target, int pid) {
+            try {
+                using (Process launcher = Process.GetProcessById(pid)) launcher.WaitForExit(30000);
+            } catch (ArgumentException) { }
+            int code = 0;
+            for (int attempt = 0; ; attempt++) {
+                try {
+                    bool register = !File.Exists(Path.Combine(target, ".openclient-portable"));
+                    InstallerEngine.Install(target, false, false, register, null);
+                    break;
+                } catch (Exception ex) {
+                    // Un archivo aún bloqueado (el launcher terminando de cerrarse, un antivirus): se reintenta.
+                    if (ex is IOException && attempt < 5) { Thread.Sleep(1000); continue; }
+                    code = 1;
+                    MessageBox.Show("No se pudo actualizar OpenClient: " + ex.Message, "OpenClient", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    break;
+                }
+            }
+            string exe = Path.Combine(target, "bin", "openclient-qt.exe");
+            try { if (File.Exists(exe)) Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = Path.GetDirectoryName(exe) }); } catch { }
+            return code;
         }
     }
 

@@ -51,6 +51,7 @@ qt_add_qml_module(openclient-qt
         qml/components/CrystalArt.qml
         qml/components/InstanceBlock.qml
         qml/components/StartupIntro.qml
+        qml/components/UpdateDialog.qml
         qml/components/WelcomeDialog.qml
         qml/components/ReleaseNotes.qml
         qml/components/AccountDialog.qml
